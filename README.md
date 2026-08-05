@@ -9,7 +9,7 @@ governor that decides which rules earn their place**
 
 [![CI](https://github.com/EmergentSpirit/agent-controls/actions/workflows/ci.yml/badge.svg)](https://github.com/EmergentSpirit/agent-controls/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-313%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-359%20passing-brightgreen.svg)](tests/)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-informational.svg)](#why-there-is-no-install-step)
 
 [Quickstart](docs/quickstart.md) · [Architecture](ARCHITECTURE.md) ·
@@ -47,7 +47,7 @@ credibility of all the others.
 
 ## What is in here
 
-Eight modules. Take one, take all of them; a single gate dropped into your own
+Nine modules. Take one, take all of them; a single gate dropped into your own
 hooks directory is a legitimate way to use this.
 
 | Module | What it does |
@@ -59,6 +59,7 @@ hooks directory is a legitimate way to use this.
 | **`sentinel/`** | Daily health checks that **discover** what they audit by reading your wiring. Its central check finds gates that are wired but silent. |
 | **`governor/`** | New rules face **two adversarial judges**, then a seven-day observation trial, before anything gets armed. |
 | **`watch/`** | A read-only local panel over gates and sessions, with a post-hoc analyst that proposes and never acts. |
+| **`mission-control/`** | A read-only local panel over the **present**: which roles are alive, what is scheduled, and what is waiting on a human. |
 | **`launchers/`** | Wiring templates: example settings per role, a vault pattern, and systemd units that carry the PATH trap's fix. |
 
 ### The thirteen gates, and the day each one was earned
@@ -135,6 +136,57 @@ watching people rather than gates.
 
 ---
 
+## Mission control: what is happening right now
+
+`watch` reads the past. This one reads the **present**, and those are different
+questions. A log line proves an agent was alive when it wrote the line. It never
+proves the agent is alive now, that a timer is about to fire, or that something
+has been sitting there since lunch waiting for a human to say yes.
+
+Run more than one agent and the failure mode stops being "an agent did something
+wrong". It becomes **nobody noticed**.
+
+<p align="center">
+  <img src="docs/media/mc-overview.png" alt="Overview: roles alive, agents mid-turn, events recorded, blockers, health alerts, circuit breaks, log integrity, and whether the execution engine is paused" width="880">
+</p>
+
+<p align="center"><em>Counts are windowed, seven days by default: an all-time
+counter keeps one bad afternoon on screen forever, and a number that never moves
+stops being read.</em></p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/media/mc-agents.png" alt="One line per role: alive or not, what its pane says it is doing, its directory and its last recorded event"></td>
+<td width="50%"><img src="docs/media/mc-schedule.png" alt="Timers and scheduled units with their next run, so an armed job nobody remembers is visible"></td>
+</tr>
+<tr>
+<td><strong>Agents.</strong> Two sources on purpose: the multiplexer answers
+"alive", the log answers "what happened". Neither can answer both.</td>
+<td><strong>Schedule.</strong> What is armed and when it fires next. A timer
+nobody remembers arming is the classic surprise.</td>
+</tr>
+</table>
+
+<p align="center">
+  <img src="docs/media/mc-logs.png" alt="The signed log: filters by role, project and kind, with a validity column per row" width="880">
+</p>
+
+Every row is **signed**, and the panel recomputes the signature as it reads. A
+row edited after the fact shows up as tampered rather than blending in, because
+a log you cannot trust is worse than no log: it makes you confident.
+
+<p align="center">
+  <img src="docs/media/mc-approvals.png" alt="Two operations waiting for a decision, each with its plain-language impact, scope, path and hash; one flagged as requiring a hardware key" width="880">
+</p>
+
+The approvals screen is the one that earns the panel. An operation waiting on
+you is shown with **what it actually does in plain language**, its scope, its
+reversibility and its hash, so the decision is made on the operation rather than
+on its filename. Acting is a separate, optional module: a panel that can only
+read is a panel you can leave running.
+
+---
+
 ## Governor: which rules earn their place
 
 A human cannot audit a system that makes decisions at machine speed. So a
@@ -172,7 +224,7 @@ kind.
 ```bash
 git clone https://github.com/EmergentSpirit/agent-controls.git
 cd agent-controls
-python3 -m pytest tests/ -q         # 313 tests, no outbound network, no install
+python3 -m pytest tests/ -q         # 359 tests, no outbound network, no install
 ```
 
 Then [**docs/quickstart.md**](docs/quickstart.md): fifteen minutes from clone to
@@ -189,6 +241,7 @@ command on that page was executed to produce it.
 | Govern which rules earn their place | [docs/governor.md](docs/governor.md) |
 | Keep memory that does not lie | [docs/statutory-memory.md](docs/statutory-memory.md) |
 | Observe without interfering | [docs/watch.md](docs/watch.md) |
+| See the fleet right now | [docs/mission-control.md](docs/mission-control.md) |
 | Wire it into your own launcher | [docs/launchers.md](docs/launchers.md) |
 | Add a gate of your own | [CONTRIBUTING.md](CONTRIBUTING.md) |
 

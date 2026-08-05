@@ -16,6 +16,7 @@ page as the contract.
 | Daily self-discovering health checks | `sentinel/` |
 | Gate governance (adversarial judges) | `governor/` |
 | Read-only observation panel | `watch/` |
+| Live fleet panel (roles, schedule, approvals) | `mission-control/` |
 | Agent launcher templates | `launchers/` |
 
 ## Environment variables
@@ -108,6 +109,37 @@ and journals it as `skip-disabled`, so routing around a gate stays visible.
 The exclusion list is a deliberate blind spot: an observation panel that can
 see everything ends up watching people, not gates. Excluding a role's
 transcripts removes them retroactively, and its gate journals stay indexed.
+
+### mission-control
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `HARNESS_MC_PORT` | Local port (bind is always 127.0.0.1) | `8787` |
+| `HARNESS_MC_DB` | Signed event database | `$HARNESS_STATE_DIR/mission-control/events.db` |
+| `HARNESS_MC_HMAC_KEY` | Row-signing key file, mode 600 | `$HARNESS_STATE_DIR/mission-control/hmac.key` |
+| `HARNESS_MC_PROGRESS_DIRS` | Colon-separated roots holding `*.jsonl` progress journals | `$HARNESS_STATE_DIR/progress` |
+| `HARNESS_MC_EXECUTOR_AUDIT` | Audit journal of an execution engine, read-only | `$HARNESS_STATE_DIR/executor/audit.jsonl` |
+| `HARNESS_MC_HALT_FLAG` | Flag file whose presence means "engine paused" | `$HARNESS_STATE_DIR/executor/halt` |
+| `HARNESS_MC_HALT_TOKEN` | Token file of the halt module, mode 600, created on demand | `$HARNESS_STATE_DIR/mission-control/halt-token` |
+| `HARNESS_MC_ROLES` | Colon-separated role names to show, in order | `builder:researcher` |
+| `HARNESS_MC_ROSTER` | Colon-separated `<role>=<pane>` pins, bypassing discovery | empty = discover |
+| `HARNESS_MC_READ_TOKEN` | Read-token file, required only for a PROXIED request | `$HARNESS_STATE_DIR/mission-control/read-token` |
+| `HARNESS_MC_WINDOW_DAYS` | Alert window of the overview, days | `7` |
+| `HARNESS_MC_INGEST_INTERVAL` | Auto-ingest throttle, seconds (`0` = off) | `120` |
+
+The panel reuses `HARNESS_OPERATOR_SCRIPT_DIRS` (the only place it will read a
+script from) and `HARNESS_LLM_CLI_NAMES` (a pane running one of these is an
+agent, anything else is a plain shell) rather than inventing its own copies.
+
+Read-only is the default and it is structural: every route that mutates
+anything outside the panel lives in an optional sibling module
+(`halt.py`, `approve.py`, `presence.py`, `deposit.py`). Absent, the route
+answers `503` and the button never appears; present, the module carries its own
+token gate. A checkout with none of them installed is physically unable to act.
+
+The halt token is deliberately NOT the read token: looking at the fleet and
+stopping it are two different authorisations, and a machine allowed to look
+must not thereby be allowed to stop.
 
 ### launchers
 
