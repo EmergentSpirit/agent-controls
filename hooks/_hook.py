@@ -77,9 +77,26 @@ except Exception:
     pass
 
 # Secret patterns scrubbed BEFORE anything is written to the journal.
+# This is a filter, not a guarantee: it catches the shapes a command line
+# actually carries. Treat the journal as readable by anyone who can read the
+# state directory, and keep payloads out of it.
 _SECRETS = re.compile(
-    r"(sk-[A-Za-z0-9_-]{8,}|AKIA[A-Z0-9]{12,}|age1[a-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}"
-    r"|Bearer\s+\S+|(?:password|passwd|token|secret|api_key|apikey)\s*[=:]\s*\S+)",
+    # Vendor-shaped tokens, recognizable on their own.
+    r"(sk-[A-Za-z0-9_-]{8,}|AKIA[A-Z0-9]{12,}|age1[a-z0-9]{20,}"
+    r"|gh[pousr]_[A-Za-z0-9]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}"
+    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
+    # Authorization headers.
+    r"|Bearer\s+\S+"
+    # A credential in a URL: scheme://user:secret@host
+    r"|://[^\s/:@]+:[^\s/@]+@"
+    # NAME=value / NAME: value, where the name says it is a secret. The name
+    # part allows separators so AWS_SECRET_ACCESS_KEY and --api-key both land.
+    r"|[A-Za-z0-9_-]*(?:password|passwd|secret|token|api[_-]?key|apikey"
+    r"|access[_-]?key|private[_-]?key|credential|auth)"
+    r"[A-Za-z0-9_-]*\s*[=:]\s*\S+"
+    # Same names in the flag-then-space form: --api-key VALUE
+    r"|--[A-Za-z0-9-]*(?:password|secret|token|api-?key|access-?key"
+    r"|private-?key|credential)[A-Za-z0-9-]*\s+\S+)",
     re.I)
 
 

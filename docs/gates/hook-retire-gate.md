@@ -18,7 +18,7 @@ separator (`&&`, `||`, `;`, `|`) or behind a command prefix
 It does NOT block anything that is not a retirement of a live hook:
 
 - `cp <hooks>/guard.py /tmp/guard.bak` — this IS the safe path
-- `rm <hooks>/end-of-mission.py.bak-20260731` — cleaning up the copies
+- `rm <hooks>/end-of-mission.py.bak-20240115` — cleaning up the copies
 - `mv <hooks>/tests/test_x.py /tmp/`, `rm <hooks>/test_helper.py` — test files
 - `mv /tmp/new-hook.py <hooks>/new-hook.py` — dropping a hook IN; only the
   sources of an `mv` count, never its destination

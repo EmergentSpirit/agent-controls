@@ -333,6 +333,106 @@ class TestRobustness(SentinelBase):
         self.assertIn("not in the allowlist", skipped[0])
 
 
+class TestProbeExecution(SentinelBase):
+    """The probe file is CONFIG, read by a job that runs unattended from a
+    timer. Allowlisting the first word of a line that is then handed whole to a
+    shell protects nothing, and one malformed line must cost one line."""
+
+    def probe_run(self, probe_lines, args=()):
+        self.hook_file("alpha-gate.py")
+        cfg = self.settings(["python3 %s" % (self.hooks / "alpha-gate.py")])
+        self.journal([("alpha", 1)])
+        probes = self.root / "probes.txt"
+        probes.write_text("".join(line + "\n" for line in probe_lines),
+                          encoding="utf-8")
+        return self.run_sentinel(["--settings", str(cfg), "--probes", str(probes)]
+                                 + list(args))
+
+    def skips(self, out):
+        return [x for x in self.lines_of(out, "probe") if x.startswith("SKIP")]
+
+    def test_t21_an_allowlisted_head_never_smuggles_a_second_command(self):
+        """The measured bypass: `test` passed the allowlist, then the WHOLE
+        line ran under `bash -c` and the half after the `;` executed."""
+        loot = self.root / "PWNED"
+        for line in ("test -d /tmp; echo PWNED > %s" % loot,
+                     "test -d /tmp && echo PWNED > %s" % loot,
+                     "test -d /tmp | tee %s" % loot,
+                     "test -d $(echo /tmp)",
+                     "test -d `echo /tmp`"):
+            r = self.probe_run([line])
+            self.assertFalse(loot.exists(),
+                             "the smuggled command RAN for %r:\n%s" % (line, r.stdout))
+            skipped = self.skips(r.stdout)
+            self.assertTrue(skipped, "%r was not skipped:\n%s" % (line, r.stdout))
+            self.assertIn("metacharacter", skipped[0])
+        # SKIP never moves the verdict, and the legitimate line still runs.
+        r = self.probe_run(["test -d /tmp; echo PWNED > %s" % loot, "test -d /tmp"])
+        self.assertEqual(self.verdict_of(r.stdout), "OK", r.stdout)
+        self.assertTrue(any(x.startswith("OK") and "test -d /tmp" in x
+                            for x in self.lines_of(r.stdout, "probe")), r.stdout)
+
+    def test_t22_the_allowlist_is_a_binary_not_a_word_and_carries_its_rules(self):
+        """A planted binary that merely SHARES the name does not pass, and an
+        allowlisted binary is still confined to read-only use."""
+        planted = self.hooks / "test"
+        planted.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        planted.chmod(0o755)
+        loot = self.root / "LOOT"
+        r = self.probe_run(["%s -d /tmp" % planted,
+                            "systemctl --user stop example-service.service",
+                            "curl -fsS --max-time 2 -o %s http://127.0.0.1:1/x" % loot,
+                            "curl -fsS --max-time 2 -T /etc/hostname http://127.0.0.1:1/x"])
+        reasons = " | ".join(self.skips(r.stdout))
+        self.assertIn("non-canonical path", reasons)
+        self.assertIn("systemctl: verb is not read-only", reasons)
+        self.assertIn("-o pointing somewhere other than /dev/null", reasons)
+        self.assertIn("forbidden option: -T", reasons)
+        self.assertFalse(loot.exists(), r.stdout)
+        self.assertEqual(len(self.skips(r.stdout)), 4, r.stdout)
+
+    def test_t23_one_malformed_probe_line_does_not_kill_the_whole_report(self):
+        """The parse used to sit outside the loop's try: an unclosed quote
+        raised to the module's fail-open handler, so NO dated report was
+        written and not one other family ran."""
+        r = self.probe_run(['test -f "/etc/hostname', "test -d /tmp"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("unexpected error", r.stderr)
+        report = self.state / "sentinel" / (datetime.now().strftime("%Y-%m-%d") + ".txt")
+        self.assertTrue(report.exists(),
+                        "no dated report was written:\n%s\n%s" % (r.stdout, r.stderr))
+        self.assertIn("VERDICT", report.read_text(encoding="utf-8"))
+        skipped = self.skips(r.stdout)
+        self.assertTrue(skipped, r.stdout)
+        self.assertIn("unparsable line", skipped[0])
+        # the malformed line costs itself, and NOTHING else
+        self.assertTrue(any(x.startswith("OK") and "test -d /tmp" in x
+                            for x in self.lines_of(r.stdout, "probe")), r.stdout)
+        for family in ("settings", "script", "journal", "coverage"):
+            self.assertTrue(self.lines_of(r.stdout, family),
+                            "family %s never ran:\n%s" % (family, r.stdout))
+        self.assertEqual(self.last_stat()["result"], "observe", self.last_stat())
+
+    def test_t24_the_probe_parser_is_the_same_gate_as_recalls_check_field(self):
+        """Pure functions, and the twin of recall.run_check by construction: a
+        second implementation of the same rule is a second thing to get wrong."""
+        mod = sentinel_module()
+        allow = set(mod.DEFAULT_PROBE_ALLOW)
+        argv, refusal = mod.probe_argv("test -d /tmp", allow)
+        self.assertEqual((argv, refusal), (["test", "-d", "/tmp"], None))
+        for bad in ("test -d /tmp; rm -rf /", "test -d /tmp > /x", "test -d ~",
+                    "test -d /tmp || bash"):
+            self.assertIn("metacharacter", mod.probe_argv(bad, allow)[1], bad)
+        self.assertIn("unparsable line", mod.probe_argv('test -f "/x', allow)[1])
+        self.assertIn("not in the allowlist", mod.probe_argv("bash -c x", allow)[1])
+        self.assertIn("nothing left after parsing", mod.probe_argv("   ", allow)[1])
+        self.assertIsNone(mod.probe_argv(
+            "curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8080/health",
+            allow)[1])
+        self.assertIsNone(mod.probe_argv(
+            "systemctl --user is-active --quiet example.service", allow)[1])
+
+
 class TestMatching(unittest.TestCase):
     """Pure functions: how a script name is matched against a journaled one."""
 

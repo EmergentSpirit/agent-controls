@@ -120,12 +120,40 @@ That layer is a config file of shell commands, off unless you point at one:
 sentinel.py --probes ~/my-probes.txt
 ```
 
-One command per line, `#` comments ignored, exit 0 is OK. Only commands whose
-first word is allowlisted actually run (`test`, `curl`, `systemctl` by
-default, override with `HARNESS_SENTINEL_PROBE_ALLOW`). Everything else
-becomes a SKIP line with its reason. The sentinel runs unattended from a
-timer, so a config file must never become an arbitrary execution surface.
+One command per line, `#` comments ignored, exit 0 is OK. Everything that is
+not allowed to run becomes a SKIP line carrying its reason, never a silence.
 See `sentinel/probes.example.txt` for the format.
+
+**A probe line is an ARGV, not a shell line.** The sentinel runs unattended
+from a timer, so a config file must never become an arbitrary execution
+surface, and the rule here is the same code as recall's `check:` field
+(`recall/recall.py`, `run_check`):
+
+1. **no shell metacharacter, and no shell at all.** A line carrying any of
+   ``; & | < > ` $ ( ) { } [ ] ! * ? ~ \`` is SKIPped; what remains is split
+   with `shlex` and run with `shell=False`. Allowlisting the first word of a
+   string you then hand to `bash -c` protects nothing:
+   `test -d /tmp; echo PWNED > /somewhere` passes a check on `test` and then
+   runs the half after the semicolon. That was a real hole, and this is what
+   closed it;
+2. **the allowlist is a BINARY, not a word.** `argv[0]` must be in the list
+   (`test`, `curl`, `systemctl` by default, override with
+   `HARNESS_SENTINEL_PROBE_ALLOW`), and when it is written as a path it must
+   resolve to the same binary as `which <basename>` -- a planted `/tmp/test`
+   does not pass;
+3. **per-binary rules.** `systemctl` is confined to read-only verbs
+   (`is-active`, `is-enabled`, `is-failed`, `status`, `show`, `list-units`,
+   `list-timers`) and `curl` may neither upload nor write to disk (`-o` only
+   to `/dev/null`). An allowlisted binary is still a binary that can act.
+
+If a probe genuinely needs a shell -- a variable, a glob, a pipeline -- put it
+in a script of your own and put that script's name in the allowlist. That is a
+deliberate code-visible decision, not a line someone slips into a config file.
+
+**One malformed line costs one line.** An unclosed quote is a SKIP naming that
+probe; the parse happens per line, inside its own `try`. It used to happen
+outside, so a single bad quote raised all the way to the fail-open handler:
+no dated report was written at all, and no other family ran that day.
 
 ## The daily verdict
 

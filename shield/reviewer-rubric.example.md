@@ -4,7 +4,8 @@
 > layer 1 armed for the turn. It carries the STANDING invariants: what holds on
 > every reviewed answer, whatever triggered the review.
 >
-> EVERY rule below is invented to show the format. Copy the file, delete them,
+> These rules show the FORMAT, and each one earned its place by catching a
+> real habit. They are not yours. Copy the file, delete them,
 > and add a rule only when a post-mortem produced it. Point
 > `HARNESS_SHIELD_RUBRIC` at your copy.
 >

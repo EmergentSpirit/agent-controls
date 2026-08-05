@@ -4,22 +4,32 @@
 #   sentinel.py --probes ~/my-probes.txt
 #   HARNESS_SENTINEL_PROBES=~/my-probes.txt
 #
-# One shell command per line. Exit 0 is OK, anything else is FAIL, and a
-# command that runs longer than 10 s is FAIL too. Lines starting with # are
-# ignored.
+# One command per line. Exit 0 is OK, anything else is FAIL, and a command that
+# runs longer than 10 s is FAIL too. Lines starting with # are ignored.
 #
-# Only commands whose FIRST word is allowlisted actually run (default
-# allowlist: test, curl, systemctl -- override with
-# HARNESS_SENTINEL_PROBE_ALLOW). Anything else is reported as SKIP with the
-# reason, never silently dropped. The sentinel runs unattended from a timer:
-# a config file must not become an arbitrary execution surface.
+# A PROBE LINE IS AN ARGV, NOT A SHELL LINE. It is split with shlex and run
+# with shell=False, so there is no variable, no glob, no `~`, no redirection
+# and no `;`. A line carrying any shell metacharacter is reported as SKIP with
+# its reason -- and so is a line the parser cannot read, a binary outside the
+# allowlist, and a binary used to act rather than to look. Nothing is ever
+# silently dropped, and nothing is ever silently run either. The sentinel runs
+# unattended from a timer: a config file must not become an execution surface.
 #
-# Nothing below ships armed. Every line is an EXAMPLE of the SHAPE of a probe.
-# A probe that does not come from a real incident is noise in tomorrow's
-# report, and noise is how a real FAIL gets scrolled past.
+# What may run: the binaries in HARNESS_SENTINEL_PROBE_ALLOW (default: test,
+# curl, systemctl), resolved through PATH -- a planted /tmp/test does not pass.
+# systemctl is confined to read-only verbs, and curl may neither upload nor
+# write anywhere but /dev/null. If a check genuinely needs a shell, put it in a
+# script of your own and add that script's name to the allowlist: a deliberate,
+# reviewable decision instead of a line slipped into a config file.
+#
+# Nothing below ships armed. Every line is an EXAMPLE of the SHAPE of a probe,
+# with a PLACEHOLDER absolute path to replace with your own. A probe that does
+# not come from a real incident is noise in tomorrow's report, and noise is how
+# a real FAIL gets scrolled past.
 
 # The state directory the whole harness writes into still exists.
-test -d "${HARNESS_STATE_DIR:-$HOME/.harness}"
+# No variable here on purpose: write the path out.
+test -d /home/REPLACE-ME/.harness
 
 # A service the agent depends on is running.
 systemctl --user is-active --quiet example-service.service
@@ -29,3 +39,9 @@ curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8080/health
 
 # Not allowlisted by default: reported as SKIP, with the reason, every run.
 # python3 /path/to/your/own/deep-check.py
+
+# Refused by design. Each one is reported with the reason it was refused:
+#   test -d /tmp; echo pwned > /tmp/x          shell metacharacter
+#   test -d "$HOME/.harness"                   shell metacharacter
+#   systemctl --user restart example.service   verb is not read-only
+#   curl -fsS -o /tmp/loot http://host/x       -o outside /dev/null

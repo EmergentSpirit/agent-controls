@@ -51,7 +51,8 @@ The operator was the one who caught it, on instinct, before launching:
 to erase something important."*
 
 The forced re-read found two real defects. A name collision — the script
-matched on `rescue`, and the operator's encrypted volume was named `secure`,
+matched on `rescue`, and an encrypted volume on the same machine was
+named `reserve`,
 close enough that a partial match could have closed the wrong device. And a
 window: `/dev/sda` was resolved once, checked, then used, with enough time in
 between for a USB re-enumeration to move that name onto a different disk.

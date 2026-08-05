@@ -65,6 +65,7 @@ import os
 import py_compile
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -536,11 +537,83 @@ def check_coverage(hooks, days, exempt, report):
 
 # --- family: probe (optional, site-specific) --------------------------------
 
+_SHELL_META_RE = re.compile(r"[;&|<>`$(){}\[\]!*?~\\]")
+
+SYSTEMCTL_RO_VERBS = {"is-active", "is-enabled", "is-failed", "status", "show",
+                      "list-units", "list-timers"}
+CURL_FORBIDDEN_OPTS = {"-O", "--remote-name", "-T", "--upload-file",
+                       "-d", "--data", "--data-raw", "--data-binary",
+                       "--data-urlencode", "-F", "--form", "-K", "--config"}
+
+
+def probe_refusal(argv, allow):
+    """None when this argv may run, otherwise the reason it may not."""
+    base = os.path.basename(argv[0])
+    if base not in allow:
+        return "'%s' is not in the allowlist %s" % (base, sorted(allow))
+    canonical = shutil.which(base)
+    if canonical is None:
+        return "binary not on PATH: %s" % base
+    if "/" in argv[0]:
+        try:
+            if os.path.realpath(argv[0]) != os.path.realpath(canonical):
+                return "non-canonical path: %s" % argv[0]
+        except OSError:
+            return "unresolvable path: %s" % argv[0]
+    if base == "systemctl":
+        verbs = [a for a in argv[1:] if not a.startswith("-")]
+        if not verbs or verbs[0] not in SYSTEMCTL_RO_VERBS:
+            return "systemctl: verb is not read-only: %s" % (verbs[:1] or "?")
+    if base == "curl":
+        args = argv[1:]
+        for i, a in enumerate(args):
+            if a in CURL_FORBIDDEN_OPTS:
+                return "curl: forbidden option: %s" % a
+            if a in ("-o", "--output") and args[i + 1:i + 2] != ["/dev/null"]:
+                return "curl: -o pointing somewhere other than /dev/null"
+    return None
+
+
+def probe_argv(command, allow):
+    """(argv, refusal) for ONE probe line. argv is None whenever refusal is not.
+
+    The parsing lives HERE, per line, inside its own try. It used to sit bare
+    in the loop, so a single unclosed quote anywhere in the probe file raised
+    all the way to the module's fail-open handler: no dated report written at
+    all, and not one other family run. A malformed line must cost that line."""
+    if _SHELL_META_RE.search(command):
+        return (None, "shell metacharacter: a probe line is an argv, not a shell line")
+    try:
+        argv = shlex.split(command)
+    except ValueError as exc:
+        return (None, "unparsable line (%s)" % exc)
+    if not argv:
+        return (None, "nothing left after parsing")
+    return (argv, probe_refusal(argv, allow))
+
+
 def run_probes(path, allow, report):
-    """OPTIONAL. One shell command per line, # comments ignored. Only commands
-    whose first word is allowlisted run: the sentinel is a timer job, and a
-    config file must never become an arbitrary execution surface. Everything
-    else becomes a SKIP line, never a silence.
+    """OPTIONAL. One command per line, # comments ignored. Only an allowlisted
+    binary, with no shell and no metacharacter, actually runs: the sentinel is
+    a timer job, and a config file must never become an arbitrary execution
+    surface. Everything else becomes a SKIP line, never a silence.
+
+    This is the same constraint, and deliberately the same CODE, as recall's
+    `check:` field (recall/recall.py, run_check). It was not always so, and the
+    gap was measured: the first word was matched against the allowlist, then
+    the WHOLE LINE was handed to `bash -c`, so `test -d /tmp; echo PWNED >
+    /somewhere` passed the check on `test` and ran the half after the
+    semicolon. Allowlisting the head of a string you then give to a shell
+    protects exactly nothing.
+
+    Defense in depth, in order:
+      1. no shell metacharacter allowed (and no shell at all: shell=False);
+      2. the ALLOWLIST applies to argv[0], and when it is given as a path it
+         must resolve to the SAME binary as `which <basename>` (a planted
+         /tmp/test does not pass);
+      3. PER-BINARY rules: systemctl restricted to read-only verbs, curl with
+         no disk write and no upload. `systemctl --user stop x` and
+         `curl -o /tmp/x` must be refused, not only `rm` and `bash`.
 
     This is where site-specific checks live -- a service unit, an HTTP probe,
     a mount point. None of that ships in the harness, because none of it is
@@ -560,13 +633,12 @@ def run_probes(path, allow, report):
         command = line.strip()
         if not command or command.startswith("#"):
             continue
-        head = os.path.basename(shlex.split(command)[0]) if command else ""
-        if head not in allow:
-            report.note("SKIP", "probe", command[:50],
-                        "'%s' is not in the allowlist %s" % (head, sorted(allow)))
+        argv, refusal = probe_argv(command, allow)
+        if refusal:
+            report.note("SKIP", "probe", command[:50], refusal)
             continue
         try:
-            proc = subprocess.run(["bash", "-c", command], capture_output=True,
+            proc = subprocess.run(argv, shell=False, capture_output=True,
                                   timeout=PROBE_TIMEOUT_S)
         except subprocess.TimeoutExpired:
             report.note("FAIL", "probe", command[:50],

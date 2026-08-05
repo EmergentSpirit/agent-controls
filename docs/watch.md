@@ -54,6 +54,36 @@ test from the laptop" and then leaves that way. Transcripts carry command
 outputs; command outputs carry everything. This is an instrument on your desk,
 never a service.
 
+### The bind is NOT the only defense
+
+That has to be said out loud, because it is the assumption that gets local
+tools breached. A loopback bind stops a stranger on the network. It stops
+neither of the two attacks that actually reach an unauthenticated local panel,
+and both of them arrive through the operator's own browser:
+
+- **DNS rebinding.** A page on a domain the attacker owns is loaded; the domain
+  then re-resolves to `127.0.0.1`. The browser connects to the panel over
+  loopback -- the bind is perfectly satisfied -- and the request carries
+  `Host: evil.attacker.example`. The Host header is the only place the attack
+  is visible at all.
+- **CSRF.** Any page open in that same browser can fire
+  `POST http://127.0.0.1:8815/api/analyze/<id>`. There is no credential to
+  steal here, and none to check: without a check, the panel simply obeys.
+
+So the panel enforces two header rules, and answers **403** before reading a
+single row:
+
+| Rule | Applies to | Accepted |
+|---|---|---|
+| `Host` names loopback | every request | `127.0.0.1`, `localhost`, `::1`, `[::1]`, each with or without a port |
+| `Origin` is absent or loopback | every non-GET request | no `Origin` at all (curl, a systemd unit, a timer), or an `http`/`https` loopback origin |
+
+`Origin: null` -- a sandboxed frame, a `file://` page -- is refused, not read
+as absent. The port inside the `Host` header is deliberately NOT checked: it
+says which port the client dialed, never who dialed it, and an SSH tunnel
+(`ssh -L 9000:127.0.0.1:8815`) legitimately changes it. The NAME is the lever a
+rebinding attacker controls, so the name is what is checked.
+
 Transcript content is treated as HOSTILE all the way through. It is served as
 JSON and never interpolated into HTML server-side; the browser side builds
 every node with `createElement` + `textContent` and uses no raw-HTML
@@ -189,6 +219,13 @@ python3 watch/indexer.py --rebuild  # throw it away and re-index
 python3 watch/server.py             # http://127.0.0.1:8815
 ```
 
+`server.py` alone is enough on a brand-new machine: it opens the derived
+database through the indexer, which applies `schema.sql` first, so the very
+first request renders an EMPTY dashboard and the incremental pass fills it. It
+used to answer `500 no such table: files` on every route until someone thought
+to run the indexer by hand -- and nothing on screen said so. An empty panel is
+correct; a permanently broken one is not.
+
 ### EXAMPLE -- systemd user unit
 
 ```ini
@@ -266,7 +303,9 @@ the panel:
 
 `POST /api/analyze` is the only non-GET route in the panel, and it mutates
 nothing outside it: it schedules a read-only judge whose entire output is one
-row in the `analyses` table.
+row in the `analyses` table. Every route above, that one included, answers
+`403` to a request whose `Host` does not name loopback, and `POST` answers
+`403` to a foreign `Origin`. See "The bind is NOT the only defense" above.
 
 ## Environment
 

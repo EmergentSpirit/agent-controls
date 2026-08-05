@@ -1,7 +1,8 @@
-# Naming and conventions (frozen at batch 1)
+# Naming and conventions
 
-Names, environment variables and status vocabulary are frozen here. Changes
-after batch 1 require a justification in the batch handoff.
+Names, environment variables and status vocabulary are fixed here. Changing
+one after the fact means changing every module that reads it, so treat this
+page as the contract.
 
 ## Modules
 

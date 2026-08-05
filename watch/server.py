@@ -13,6 +13,10 @@ Security, non-negotiable:
 - bind 127.0.0.1 ONLY (config.HOST). Never a wildcard bind, never a public
   host. Transcripts carry command outputs; this is an instrument on your desk,
   and a test greps this file for any wildcard address literal.
+- the bind is NOT the only defense: every request must carry a Host header
+  naming loopback (DNS rebinding), and every mutating request must carry no
+  Origin or a loopback one (CSRF from the operator's own browser). Anything
+  else is 403. See host_problem/origin_problem below.
 - transcript content is UNTRUSTED: served as JSON, never interpolated into
   HTML server-side, and the client only ever uses textContent (a test greps
   the static files for the raw-HTML assignment APIs).
@@ -45,7 +49,16 @@ MIME = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
 
 
 def db():
-    conn = sqlite3.connect(C.db_path())
+    """Open the derived database, SCHEMA INCLUDED.
+
+    `indexer.open_db` creates the parent directory and applies `schema.sql`, so
+    the panel started alone -- which is exactly what the docstring above and
+    the systemd unit in docs/watch.md tell an adopter to do -- renders an EMPTY
+    dashboard on a fresh machine instead of answering 500 `no such table:
+    files` on every route until someone thinks to run the indexer first. An
+    empty panel is correct. A permanently broken one is not, and the person
+    hitting it has no reason to suspect a missing table."""
+    conn = indexer.open_db()
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -202,10 +215,77 @@ def api_content(session_id, seq):
         return {"error": "cannot re-read: %s" % type(exc).__name__}
 
 
+# --- request guard: Host and Origin -----------------------------------------
+# THE BIND IS NOT THE ONLY DEFENSE, and on its own it never was. Two attacks
+# walk straight past a loopback socket, and this service is unauthenticated by
+# design and serves whole transcripts:
+#
+# - DNS REBINDING. A name the attacker owns resolves to 127.0.0.1 after the
+#   page is loaded. The operator's browser then connects to the panel over
+#   loopback -- so the bind is satisfied -- and the request carries
+#   `Host: evil.attacker.example`. The Host header is the only place that
+#   attack is visible at all.
+# - CSRF. Any page open in that same browser can fire
+#   `POST http://127.0.0.1:8815/api/analyze/<id>` at the panel, and without a
+#   check the panel obeys. No credential is needed: there is none.
+#
+# So: the Host header must NAME loopback on every request, and a mutating
+# request must carry either no Origin (curl, a unit, a timer) or a loopback
+# one. Anything else is 403 before a single row is read.
+LOOPBACK_HOSTNAMES = frozenset(("127.0.0.1", "localhost", "::1", "[::1]"))
+
+
+def host_problem(header):
+    """None when the Host header names loopback, otherwise the reason to 403.
+
+    The PORT is deliberately not checked: it says which port the client dialed,
+    never who dialed it, and an SSH tunnel (`ssh -L 9000:127.0.0.1:8815`)
+    legitimately changes it. A rebinding attacker controls the NAME."""
+    if header is None:
+        return "no Host header"
+    host = header.strip()
+    if host.startswith("["):                       # [::1] or [::1]:8815
+        name = host.partition("]")[0] + "]"
+    elif host.count(":") == 1:                     # 127.0.0.1:8815
+        name = host.rsplit(":", 1)[0]
+    else:                                          # 127.0.0.1, localhost, ::1
+        name = host
+    if name.lower() in LOOPBACK_HOSTNAMES:
+        return None
+    return "Host header %r does not name loopback" % host[:60]
+
+
+def origin_problem(header):
+    """None when a mutating request may proceed.
+
+    An absent Origin is fine: curl, a systemd unit and a timer send none. A
+    PRESENT one means a browser sent it, and then it has to be us. `Origin:
+    null` (sandboxed frame, file://) is REFUSED rather than read as absent."""
+    if header is None:
+        return None
+    origin = header.strip()
+    parsed = urllib.parse.urlparse(origin)
+    if parsed.scheme in ("http", "https") and (parsed.hostname or "").lower() \
+            in LOOPBACK_HOSTNAMES:
+        return None
+    return "Origin %r is not a loopback origin" % origin[:60]
+
+
 # --- HTTP -------------------------------------------------------------------
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "harness-watch/1.0"
+
+    def _guard(self):
+        """True when the request may proceed. When it may not, the 403 has
+        already been written and the caller must return at once."""
+        problem = host_problem(self.headers.get("Host"))
+        if problem is None and self.command != "GET":
+            problem = origin_problem(self.headers.get("Origin"))
+        if problem is None:
+            return True
+        self._json({"error": "forbidden: %s" % problem}, 403)
+        return False
 
     def _send(self, code, body, ctype="application/json; charset=utf-8"):
         self.send_response(code)
@@ -234,6 +314,8 @@ class Handler(BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(url.query)
         parts = [p for p in url.path.split("/") if p]
         try:
+            if not self._guard():
+                return
             if url.path == "/":
                 return self._serve_static("index.html")
             if parts and parts[0] == "static" and len(parts) == 2:
@@ -260,6 +342,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parts = [p for p in urllib.parse.urlparse(self.path).path.split("/") if p]
         try:
+            if not self._guard():
+                return
             # The ONLY mutating route, and it mutates nothing outside the
             # panel: it schedules a read-only judge whose output is a row.
             if len(parts) == 3 and parts[0] == "api" and parts[1] == "analyze":

@@ -1,0 +1,13 @@
+# Known-good findings, each one a DELIBERATE fake credential used as a test
+# fixture. No real secret has ever been committed to this repository: the
+# history is fresh, and it was scanned tree-wide and commit-wide before the
+# repository was made public.
+#
+# The fixture below feeds the test that proves the journal scrubber catches
+# an api_key shape. The current version of the line carries an inline
+# `gitleaks:allow`; this entry covers the commit made before that annotation
+# was added, since history is immutable.
+#
+# Adding to this file means asserting, by hand, that a finding is fake.
+# Nothing here is a mute button for a real leak.
+98df07fd04cffc5f980370297ef111630bfab4e0:tests/test_watch.py:generic-api-key:35

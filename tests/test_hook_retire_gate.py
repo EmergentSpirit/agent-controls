@@ -110,7 +110,7 @@ class TestHookRetireGate(unittest.TestCase):
     def test_edge_backups_and_tests_stay_removable(self):
         """Cleaning up the .bak copies and moving test files must stay free,
         otherwise the safe path itself becomes a dead end."""
-        for cmd in (f"rm {self.hooks_a}/end-of-mission.py.bak-20260731",
+        for cmd in (f"rm {self.hooks_a}/end-of-mission.py.bak-20240115",
                     f"mv {self.hooks_a}/tests/test_x.py /tmp/",
                     f"rm {self.hooks_a}/test_helper.py"):
             with self.subTest(cmd=cmd):
