@@ -94,12 +94,21 @@ def mask_secrets(text, n=200):
 
 def gate_stat(hook, result, **kw):
     """One JSON line per hook execution, whatever the result. Fail-open.
-    session_id/cwd auto-added when the stdin carried them."""
+    session_id/cwd auto-added when the stdin carried them.
+
+    Every string value is scrubbed on the way in. Gates journal the command
+    or the path that tripped them, and a command can carry a token: without
+    this, the journal quietly becomes the least protected copy of a secret
+    on the machine. Scrubbing belongs here, not in each caller, because the
+    one caller that forgets is the one that leaks.
+    """
     try:
         rec = {"ts": datetime.now().isoformat(timespec="seconds"),
                "hook": hook, "result": result}
         for k, v in _CTX.items():
             rec.setdefault(k, v)
+        for k, v in kw.items():
+            kw[k] = mask_secrets(v, 500) if isinstance(v, str) else v
         rec.update(kw)
         os.makedirs(os.path.dirname(GATE_STATS), exist_ok=True)
         with open(GATE_STATS, "a", encoding="utf-8") as f:

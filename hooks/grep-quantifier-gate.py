@@ -158,6 +158,7 @@ def main() -> int:
         gate_stat("grep-quantifier", "fail-open")
         return 0  # unreadable input = never block blindly
     if data.get("tool_name") != "Bash":
+        gate_stat("grep-quantifier", "skip-not-bash")
         return 0
     cmd = (data.get("tool_input") or {}).get("command") or ""
     if not dangerous_command(cmd):

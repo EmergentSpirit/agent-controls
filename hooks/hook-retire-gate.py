@@ -127,6 +127,7 @@ def main() -> None:
         gate_stat("hook-retire", "fail-open")
         sys.exit(0)  # unreadable input: never block blindly
     if data.get("tool_name", "Bash") != "Bash":
+        gate_stat("hook-retire", "skip-not-bash")
         sys.exit(0)  # other tools are out of scope
     cmd = (data.get("tool_input") or {}).get("command") or ""
     cwd = data.get("cwd") or os.getcwd()

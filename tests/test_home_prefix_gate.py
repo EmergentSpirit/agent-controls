@@ -105,13 +105,18 @@ class TestHomePrefixGate(unittest.TestCase):
         self.assertEqual(self.last_stat()["result"], "skip-disabled")
 
     def test_non_bash_tool_ignored(self):
-        """Other tools are out of scope: exit 0, no journal line."""
+        """Other tools are out of scope: exit 0, allowed, and STILL journaled.
+        A gate that stays silent on a path cannot be told apart from a
+        gate that is dead, which is what the coverage check looks for."""
         payload = json.dumps({"tool_name": "Write",
                               "tool_input": {"file_path": "/tmp/f",
                                              "content": "HOME=/tmp/x"}})
         r = run_hook(payload, self.env)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertFalse(self.stats.exists())
+        line = json.loads(
+            self.stats.read_text(encoding="utf-8").strip().splitlines()[-1])
+        self.assertEqual(line["hook"], "home-prefix")
+        self.assertEqual(line["result"], "skip-not-bash")
 
 
 if __name__ == "__main__":
