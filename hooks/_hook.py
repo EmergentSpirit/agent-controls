@@ -80,31 +80,50 @@ except Exception:
 # This is a filter, not a guarantee: it catches the shapes a command line
 # actually carries. Treat the journal as readable by anyone who can read the
 # state directory, and keep payloads out of it.
+#
+# design-note: every quantifier here is BOUNDED and the alternatives do not
+# overlap. An earlier version wrapped the keyword alternation in two greedy
+# `[A-Za-z0-9_-]*`, which backtracks quadratically: 40 kB of one repeated
+# keyword took 400+ seconds. This text can come from a transcript, which the
+# project itself treats as hostile input, so a masker that backtracks is a
+# remote stall. Keep the bounds, and measure before widening.
 _SECRETS = re.compile(
     # Vendor-shaped tokens, recognizable on their own.
-    r"(sk-[A-Za-z0-9_-]{8,}|AKIA[A-Z0-9]{12,}|age1[a-z0-9]{20,}"
-    r"|gh[pousr]_[A-Za-z0-9]{20,}|xox[abprs]-[A-Za-z0-9-]{10,}"
-    r"|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"
+    r"sk-[A-Za-z0-9_-]{8,80}|AKIA[A-Z0-9]{12,30}|age1[a-z0-9]{20,80}"
+    r"|gh[pousr]_[A-Za-z0-9]{20,80}|xox[abprs]-[A-Za-z0-9-]{10,80}"
+    r"|eyJ[A-Za-z0-9_-]{10,200}\.[A-Za-z0-9_-]{10,400}\.[A-Za-z0-9_-]{10,200}"
     # Authorization headers.
-    r"|Bearer\s+\S+"
-    # A credential in a URL: scheme://user:secret@host
-    r"|://[^\s/:@]+:[^\s/@]+@"
-    # NAME=value / NAME: value, where the name says it is a secret. The name
-    # part allows separators so AWS_SECRET_ACCESS_KEY and --api-key both land.
-    r"|[A-Za-z0-9_-]*(?:password|passwd|secret|token|api[_-]?key|apikey"
-    r"|access[_-]?key|private[_-]?key|credential|auth)"
-    r"[A-Za-z0-9_-]*\s*[=:]\s*\S+"
+    r"|Bearer\s+\S{1,400}"
+    # A credential inside a URL: scheme://user:secret@host
+    r"|://[^\s/:@]{1,80}:[^\s/@]{1,200}@"
+    # NAME=value / NAME: value, where the NAME says it holds a secret. The
+    # name is matched as one bounded token, not as two greedy runs around an
+    # alternation.
+    # `auth` is deliberately NOT a keyword here: it turned `--author=alice`,
+    # `AUTHORS:` and `auth: refactor` into masked noise, and the credentials
+    # it would have caught (AUTH_TOKEN, Authorization: Bearer) already match
+    # on `token` and on the Bearer branch. Over-masking costs a journal you
+    # can no longer read back, which is the whole reason to keep one.
+    r"|[A-Za-z0-9_-]{0,40}(?:password|passwd|secret|token|api[_-]?key|apikey"
+    r"|access[_-]?key|private[_-]?key|credential)"
+    r"[A-Za-z0-9_-]{0,40}\s{0,4}[=:]\s{0,4}\S{1,400}"
     # Same names in the flag-then-space form: --api-key VALUE
-    r"|--[A-Za-z0-9-]*(?:password|secret|token|api-?key|access-?key"
-    r"|private-?key|credential)[A-Za-z0-9-]*\s+\S+)",
+    r"|--[A-Za-z0-9-]{0,40}(?:password|secret|token|api-?key|access-?key"
+    r"|private-?key|credential)[A-Za-z0-9-]{0,40}\s{1,4}\S{1,400}",
     re.I)
 
 
 def mask_secrets(text, n=200):
-    """Truncate to n chars and scrub secret patterns. For the `target` field."""
+    """Scrub secret patterns from at most n characters of `text`.
+
+    Truncation happens FIRST, on purpose. It bounds the work whatever the
+    caller hands over, and it costs nothing in coverage: a secret past the
+    cut was never going to appear in the output anyway.
+    """
     try:
-        t = _SECRETS.sub("«secret»", str(text))
-        return t[:n] + ("…" if len(t) > n else "")
+        raw = str(text)
+        clipped = raw[:n]
+        return _SECRETS.sub("«secret»", clipped) + ("…" if len(raw) > n else "")
     except Exception:
         return ""
 

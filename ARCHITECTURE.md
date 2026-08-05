@@ -186,21 +186,33 @@ nobody runs, which is a code path that is already broken.
 ## 3. The module map
 
 ```
-                          hooks/_hook.py
-                (gate_stat, read_stdin_json, mask_secrets,
-                 STATE_DIR, GATE_STATS, transcript helpers)
-                                 |
-   +---------+---------+---------+---------+---------+---------+
-   |         |         |         |         |         |         |
-hooks/   memory/   shield/   recall/  sentinel/ governor/   watch/
-12 gates  1 gate   2 hooks   2 hooks   health    2 judges   indexer
-2 stamps           registry   engine   checks    proposal   server
-                   rubric    curation            trial      analyst
-                                                 audit      static UI
+                          hooks/_hook.py                hooks/_exec_guard.py
+                (gate_stat, read_stdin_json, mask_secrets,   (argv allowlist
+                 STATE_DIR, GATE_STATS, transcript helpers)   per binary)
+                                 |                            |     |
+   +---------+---------+---------+---------+---------+--------+--+  |
+   |         |         |         |         |         |           |  |
+hooks/   memory/   shield/   recall/  sentinel/ governor/   watch/  |
+12 gates  1 gate   2 hooks   2 hooks   health    2 judges   indexer |
+2 stamps           registry   engine   checks    proposal   server  |
+                   rubric    curation  ^         trial      analyst |
+                                       |         audit      static UI
+                                       +--------- check: and probe -+
 ```
 
-`hooks/_hook.py` is the **only** shared socket. Every other module reaches it
-the same way, by path, and tolerates its absence:
+`hooks/` holds the **only** two shared sockets: `_hook.py` (journal, state
+directory, stdin protocol) and `_exec_guard.py` (the rule for running a
+command line that came out of a CONFIG FILE, used by the sentinel's probe file
+and by recall's `check:` field). Both are stdlib-only, and both are private by
+name, so the hook enumerator skips them. `_exec_guard.py` exists because that
+rule was written twice: the copies diverged at the first fix, and for the
+length of one commit recall still executed `curl -o/tmp/loot` while the
+sentinel refused it. Two implementations of one rule are two things to get
+wrong, and one of them will be the one nobody re-audits.
+
+Every other module reaches a socket the same way, by path, and tolerates its
+absence -- except this guard, whose absence CLOSES the door instead of opening
+it (`sentinel` turns every probe line into a SKIP, `recall` refuses to load):
 
 ```python
 sys.path.insert(0, os.path.join(HERE, os.pardir, "hooks"))
@@ -215,11 +227,12 @@ Who depends on whom, in full:
 | Module | Depends on | Nothing depends on it |
 |---|---|---|
 | `hooks/_hook.py` | stdlib only | (it is the socket) |
+| `hooks/_exec_guard.py` | stdlib only | (it is the second socket: `recall/`, `sentinel/`) |
 | `hooks/*-gate.py` | `_hook` | yes, each gate is a leaf |
 | `memory/memory-verdict-gate.py` | `_hook` | yes |
 | `shield/` | `_hook`, `shield/_registry.py` | yes |
-| `recall/` | `_hook`, `recall/recall.py` (engine, reused by `curate.py` as its own validator) | yes |
-| `sentinel/` | `_hook`; READS settings files and the journal | yes |
+| `recall/` | `_hook`, `_exec_guard`, `recall/recall.py` (engine, reused by `curate.py` as its own validator) | yes |
+| `sentinel/` | `_hook`, `_exec_guard`; READS settings files and the journal | yes |
 | `governor/` | `_hook` via `governor/_state.py`; `governor/judges.py` | yes |
 | `watch/` | `_hook` via `watch/config.py`; READS transcripts and journals | yes |
 

@@ -128,11 +128,46 @@ The prompt tells the model not to touch that field. A prompt instruction is not
 a constraint. Two independent barriers are:
 
 1. **At execution.** No shell at all (`shell=False`), no shell metacharacter
-   accepted, an ALLOWLIST of executables, and per-binary rules on top:
-   `systemctl` is restricted to read-only verbs, `curl` may not write to disk
-   or upload. `systemctl --user stop x` and `curl -o /var/tmp/x` are refused,
-   not just `rm` and `bash`. A binary given as a path must resolve to the same
-   file as the one on `PATH`, so a planted look-alike does not pass. Widening
+   accepted, an ALLOWLIST of executables, and per-binary rules on top. A binary
+   given as a path must resolve to the same file as the one on `PATH`, so a
+   planted look-alike does not pass. The per-binary rules are ALLOWLISTS too --
+   a list of *forbidden* options is a promise nobody can keep on a CLI with
+   hundreds of them -- so each binary declares what it may receive and
+   everything else is refused:
+
+   | binary | what a `check:` line may carry |
+   |---|---|
+   | `curl` | `-s` `--silent`, `-S` `--show-error`, `-f` `--fail`, `-I` `--head`, `-o`/`--output` **whose value is exactly `/dev/null`**, `-w`/`--write-out`, `-m`/`--max-time <seconds>`, `--connect-timeout <seconds>`, and exactly **one** `http://` or `https://` URL |
+   | `systemctl` | the read-only verbs `is-active`, `is-enabled`, `is-failed`, `status`, `show`, `list-units`, `list-timers`, plus the value-less flags `--user`, `--system`, `--quiet`, `-q`, `--no-pager`, `--all`, `--full`, `--plain` |
+   | `test` | one operator among `-e -f -d -r -w -x -s -h -L -p -S -b -c`, and one **absolute** path |
+   | `pgrep`, `plocate` | no rule of their own: neither has a write or an upload primitive, so for those two the allowlist plus the no-shell rule IS the whole guarantee |
+
+   The forms matter as much as the names. A value **glued** to its flag
+   (`-o/var/tmp/loot`), **joined** with `=` (`--output=/var/tmp/loot`) or
+   **hidden in a short cluster** (`-fsSo /var/tmp/loot`) is refused: a
+   value-taking option must stand alone and its value must be the next
+   argument. Clustering is allowed only for the value-less letters, so `-fsS`
+   still works. `-w` is allowlisted and its VALUE is checked too: `@file` (a
+   format read from disk) and `%output{...}` (curl >= 8.3 writes a file from
+   the format string) are refused. And because curl reads `file://` and
+   `scp://` as happily as it reads HTTP, the URL scheme is checked rather than
+   assumed.
+
+   This replaced a blocklist, and the difference was measured on curl 8.5.0:
+   `-o/tmp/loot.txt`, `-fsSo /tmp/loot.txt`, `--data-ascii @/etc/hostname`
+   (which POSTs the content of a local file to the remote host and writes
+   nothing at all), `--json`, `-D`, `--dump-header`, `--trace-ascii`,
+   `--stderr`, `-c`, `--cookie-jar`, `--etag-save`, `--remote-name-all`,
+   `--form-string`, `-w @file` and `file:///etc/hostname` all walked past a
+   list naming `-O`, `-T`, `-d`, `-F` and `--config`: 18 attacks out of 18
+   reported **ok**, 10 files written on disk, 3 POSTs of a local file to the
+   sink. `tests/test_recall.py` now runs each of them for real, and asserts
+   the refusal, the empty loot directory AND the untouched server.
+
+   The rule lives in `hooks/_exec_guard.py` and is the same OBJECT the
+   sentinel uses for its probe file (`tests/test_sentinel.py` asserts the
+   identity). It was two copies once, and the copies diverged: the sentinel
+   was hardened while this side kept the blocklist, holes included. Widening
    the allowlist is a code edit on purpose: it gets reviewed, and it cannot
    happen by editing a data file.
 2. **At curation.** The `check:` lines are restored from the previous version
@@ -181,7 +216,8 @@ indistinguishable from a gate that has been unwired.
 | `recall/recall-refresh.sh` | rebuild the file index, then run the health pass |
 | `recall/CATALOG.example.md` | EXAMPLE catalog (every entry invented) |
 | `recall/STAGING.example.md` | EXAMPLE staging structure (empty by design) |
-| `tests/test_recall.py` | 46 cases, zero network, zero LLM call |
+| `hooks/_exec_guard.py` | the `check:` execution guard, SHARED with the sentinel's probe file |
+| `tests/test_recall.py` | 62 cases, zero outbound network, zero LLM call |
 
 ## Environment
 

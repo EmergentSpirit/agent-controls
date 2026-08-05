@@ -84,7 +84,7 @@ Everything follows from that:
 
 ```bash
 git clone <this-repo> ~/harness && cd ~/harness
-python3 -m pytest tests/ -q         # 275 tests, no network, no install
+python3 -m pytest tests/ -q         # 313 tests, no outbound network, no install
 ```
 
 Then [docs/quickstart.md](docs/quickstart.md): fifteen minutes from clone to a

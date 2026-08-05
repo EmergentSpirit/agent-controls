@@ -60,6 +60,11 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, os.pardir, "hooks"))
 from _hook import STATE_DIR  # noqa: E402
+# The guard of the `check:` field, shared with the sentinel's probe file: one
+# rule, one implementation. Imported plainly, like _hook above -- without it
+# nothing here may execute anything, so a partial install must stop loudly
+# rather than run a catalog line unchecked.
+from _exec_guard import SHELL_META_RE, binary_refusal  # noqa: E402
 
 HOME = os.path.expanduser("~")
 RECALL_STATE = os.path.join(STATE_DIR, "recall")
@@ -310,20 +315,24 @@ def path_exists(p):
 #   2. an ALLOWLIST of executables -- argv[0] must be in it, and when given as
 #      a path it must resolve to the SAME binary as `which <basename>` (a
 #      planted /tmp/systemctl does not pass);
-#   3. PER-BINARY rules: systemctl restricted to read-only verbs, curl with no
-#      disk write and no upload. `systemctl --user stop x` and `curl -o /tmp/x`
-#      must be refused, not only `rm` and `bash`.
+#   3. PER-BINARY rules, ALLOWLISTS as well: each binary declares the options
+#      it may receive and everything else is refused, including a value glued
+#      to its flag (-o/tmp/loot), joined with "=" (--output=/tmp/loot) or
+#      hidden in a short cluster (-fsSo /tmp/loot). curl is held to read-only
+#      options plus one http(s) URL, systemctl to read-only verbs, test to one
+#      operator and one absolute path. pgrep and plocate carry no rule of
+#      their own: neither has a write or an upload primitive, so for those two
+#      the allowlist plus the no-shell rule IS the whole guarantee.
+#
+# Steps 2 and 3 are hooks/_exec_guard.py, imported at the top of this file and
+# shared with the sentinel's probe file, which executes operator-written lines
+# under the same danger. They were two copies for a while, and the copies
+# diverged: the sentinel replaced its curl blocklist with an allowlist and
+# this file kept the blocklist, holes included, until it was mirrored here.
 #
 # Widening CHECK_ALLOWED_BINS is a code edit on purpose: it is reviewed, it
 # does not happen by editing a data file a model can rewrite.
-_SHELL_META_RE = re.compile(r"[;&|<>`$(){}\[\]!*?~\\]")
-
 CHECK_ALLOWED_BINS = {"systemctl", "test", "curl", "pgrep", "plocate"}
-SYSTEMCTL_RO_VERBS = {"is-active", "is-enabled", "is-failed", "status", "show",
-                      "list-units", "list-timers"}
-CURL_FORBIDDEN_OPTS = {"-O", "--remote-name", "-T", "--upload-file",
-                       "-d", "--data", "--data-raw", "--data-binary",
-                       "--data-urlencode", "-F", "--form", "-K", "--config"}
 
 # run_check: distinguishable statuses. Before, five different causes collapsed
 # into a single None and a refusal appeared nowhere.
@@ -337,30 +346,7 @@ CHECK_ABSENT = None                 # the entry carries no check:
 def _refuse_binary(argv):
     """Apply the allowlist and the per-binary rules. None when allowed,
     otherwise a short reason for the report."""
-    base = os.path.basename(argv[0])
-    if base not in CHECK_ALLOWED_BINS:
-        return "binary outside the allowlist: %s" % base
-    canonical = shutil.which(base)
-    if canonical is None:
-        return "binary not on PATH: %s" % base
-    if "/" in argv[0]:
-        try:
-            if os.path.realpath(argv[0]) != os.path.realpath(canonical):
-                return "non-canonical path: %s" % argv[0]
-        except OSError:
-            return "unresolvable path: %s" % argv[0]
-    if base == "systemctl":
-        verbs = [a for a in argv[1:] if not a.startswith("-")]
-        if not verbs or verbs[0] not in SYSTEMCTL_RO_VERBS:
-            return "systemctl: verb is not read-only: %s" % (verbs[:1] or "?")
-    if base == "curl":
-        args = argv[1:]
-        for i, a in enumerate(args):
-            if a in CURL_FORBIDDEN_OPTS:
-                return "curl: forbidden option: %s" % a
-            if a in ("-o", "--output") and args[i + 1:i + 2] != ["/dev/null"]:
-                return "curl: -o pointing somewhere other than /dev/null"
-    return None
+    return binary_refusal(argv, CHECK_ALLOWED_BINS)
 
 
 def run_check(cmd):
@@ -368,7 +354,7 @@ def run_check(cmd):
     (rc 0 = alive). Returns (status, reason)."""
     if not cmd:
         return (CHECK_ABSENT, None)
-    if _SHELL_META_RE.search(cmd):
+    if SHELL_META_RE.search(cmd):
         return (CHECK_REFUSED, "shell metacharacter: %s" % cmd[:60])
     try:
         argv = shlex.split(cmd)

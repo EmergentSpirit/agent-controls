@@ -33,9 +33,15 @@ sheet: (optional) working sheet whose content is injected on match
 importance: optional integer (reserved, unused)
 ```
 
-Only `check:` commands from a small allowlist are ever executed (`systemctl`
-read-only verbs, `test`, `pgrep`, `curl` with no disk write). A `check:` field
-is never written by a model: the curation pass restores it.
+Only `check:` commands from a small allowlist are ever executed, and each
+binary carries its own ALLOWLIST of options: `systemctl` read-only verbs plus
+value-less flags, `test` with one operator and one absolute path, `curl` held
+to `-s -S -f -I`, `-o /dev/null`, `-w`, `-m`/`--connect-timeout` and exactly
+one `http(s)` URL, `pgrep` and `plocate` unruled (neither can write or upload).
+Anything else is refused, including a value glued to its flag (`-o/tmp/x`),
+joined with `=` (`--output=/tmp/x`) or hidden in a cluster (`-fsSo /tmp/x`).
+See `docs/recall.md` for the table. A `check:` field is never written by a
+model either: the curation pass restores it.
 
 ---
 

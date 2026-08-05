@@ -9,6 +9,7 @@ page as the contract.
 | Concept | Directory |
 |---|---|
 | Cross-cutting hook helper + gates | `hooks/` |
+| Shared guard for executing a config-file command line | `hooks/_exec_guard.py` |
 | Behavioral rule enforcement (3 layers) | `shield/` |
 | Statutory memory format + its gate | `memory/` |
 | "Already built" artifact catalog | `recall/` |
@@ -76,7 +77,7 @@ and journals it as `skip-disabled`, so routing around a gate stays visible.
 | `HARNESS_SENTINEL_EXEMPT` | Extra colon-separated exemption globs | empty |
 | `HARNESS_SENTINEL_ACTIVITY_PATHS` | Paths proving a session ran (silence becomes FAIL) | empty |
 | `HARNESS_SENTINEL_PROBES` | Optional probe file; unset = probe family off | unset |
-| `HARNESS_SENTINEL_PROBE_ALLOW` | Allowed probe commands (first word) | `test:curl:systemctl` |
+| `HARNESS_SENTINEL_PROBE_ALLOW` | Allowed probe binaries (argv[0], resolved through PATH) | `test:curl:systemctl` |
 
 ### governor
 

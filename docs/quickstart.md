@@ -47,7 +47,7 @@ cd /tmp/harness-quickstart/harness
 ................................................ [ 66%]
 ...................................................... [ 86%]
 ...................................                     [100%]
-264 passed, 148 subtests passed in 6.84s
+313 passed, 179 subtests passed in 29.74s
 ```
 
 The suites themselves make zero network call and use no API key: every LLM judge

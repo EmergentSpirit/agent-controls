@@ -17,10 +17,27 @@
 #
 # What may run: the binaries in HARNESS_SENTINEL_PROBE_ALLOW (default: test,
 # curl, systemctl), resolved through PATH -- a planted /tmp/test does not pass.
-# systemctl is confined to read-only verbs, and curl may neither upload nor
-# write anywhere but /dev/null. If a check genuinely needs a shell, put it in a
-# script of your own and add that script's name to the allowlist: a deliberate,
-# reviewable decision instead of a line slipped into a config file.
+#
+# Each of those binaries then has an ALLOWLIST of options, not a list of
+# forbidden ones. What a health probe needs is allowed; everything else is
+# refused, whatever it is called:
+#
+#   curl       -s --silent, -S --show-error, -f --fail, -I --head,
+#              -o/--output with the value /dev/null and nothing else,
+#              -w/--write-out, -m/--max-time <seconds>,
+#              --connect-timeout <seconds>, and exactly ONE http(s) URL
+#   systemctl  the read-only verbs (is-active, is-enabled, is-failed, status,
+#              show, list-units, list-timers) and the value-less flags
+#              --user --system --quiet -q --no-pager --all --full --plain
+#   test       one operator among -e -f -d -r -w -x -s -h -L -p -S -b -c,
+#              and one ABSOLUTE path
+#
+# The FORM counts as much as the name: a value glued to its flag (-o/tmp/loot),
+# joined with "=" (--output=/tmp/loot) or hidden in a cluster (-fsSo /tmp/loot)
+# is refused. Clustering is fine for the value-less letters, so -fsS still
+# works. If a check genuinely needs more, put it in a script of your own and
+# add that script's name to the allowlist: a deliberate, reviewable decision
+# instead of a line slipped into a config file.
 #
 # Nothing below ships armed. Every line is an EXAMPLE of the SHAPE of a probe,
 # with a PLACEHOLDER absolute path to replace with your own. A probe that does
@@ -45,3 +62,12 @@ curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8080/health
 #   test -d "$HOME/.harness"                   shell metacharacter
 #   systemctl --user restart example.service   verb is not read-only
 #   curl -fsS -o /tmp/loot http://host/x       -o outside /dev/null
+#   curl -fsS -o/tmp/loot http://host/x        value glued to the flag
+#   curl -fsS --output=/tmp/loot http://host/x value joined with "="
+#   curl -fsSo /tmp/loot http://host/x         -o hidden in a cluster
+#   curl -sS --data-ascii @/etc/hostname URL   uploads a local file
+#   curl -sS -D /tmp/headers URL               writes a file (and so do
+#                                              --trace-ascii, --stderr,
+#                                              --cookie-jar, --etag-save,
+#                                              --remote-name-all, ...)
+#   curl -sS -o /dev/null file:///etc/hostname URL scheme is not http(s)

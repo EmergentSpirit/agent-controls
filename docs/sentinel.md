@@ -126,8 +126,12 @@ See `sentinel/probes.example.txt` for the format.
 
 **A probe line is an ARGV, not a shell line.** The sentinel runs unattended
 from a timer, so a config file must never become an arbitrary execution
-surface, and the rule here is the same code as recall's `check:` field
-(`recall/recall.py`, `run_check`):
+surface. Steps 2 and 3 below live in `hooks/_exec_guard.py` and are the same
+OBJECT recall's `check:` field uses (`recall/recall.py`, `run_check`): one
+implementation, imported twice, and `tests/test_sentinel.py` asserts the
+identity rather than claiming it. It was two copies for a while, and they
+diverged the way copies do -- this side was hardened first while the recall
+side kept the old blocklist, holes included.
 
 1. **no shell metacharacter, and no shell at all.** A line carrying any of
    ``; & | < > ` $ ( ) { } [ ] ! * ? ~ \`` is SKIPped; what remains is split
@@ -141,10 +145,43 @@ surface, and the rule here is the same code as recall's `check:` field
    `HARNESS_SENTINEL_PROBE_ALLOW`), and when it is written as a path it must
    resolve to the same binary as `which <basename>` -- a planted `/tmp/test`
    does not pass;
-3. **per-binary rules.** `systemctl` is confined to read-only verbs
-   (`is-active`, `is-enabled`, `is-failed`, `status`, `show`, `list-units`,
-   `list-timers`) and `curl` may neither upload nor write to disk (`-o` only
-   to `/dev/null`). An allowlisted binary is still a binary that can act.
+3. **per-binary rules, and they are ALLOWLISTS too.** An allowlisted binary is
+   still a binary that can act, and a list of *forbidden* options is a promise
+   nobody can keep on a CLI with hundreds of them. So each binary declares what
+   it may receive, and everything else is refused:
+
+   | binary | what a probe line may carry |
+   |---|---|
+   | `curl` | `-s` `--silent`, `-S` `--show-error`, `-f` `--fail`, `-I` `--head`, `-o`/`--output` **whose value is exactly `/dev/null`**, `-w`/`--write-out`, `-m`/`--max-time <seconds>`, `--connect-timeout <seconds>`, and exactly **one** `http://` or `https://` URL |
+   | `systemctl` | the read-only verbs `is-active`, `is-enabled`, `is-failed`, `status`, `show`, `list-units`, `list-timers`, plus the value-less flags `--user`, `--system`, `--quiet`, `-q`, `--no-pager`, `--all`, `--full`, `--plain` |
+   | `test` | one operator among `-e -f -d -r -w -x -s -h -L -p -S -b -c`, and one **absolute** path |
+
+   The forms matter as much as the names. A value **glued** to its flag
+   (`-o/tmp/loot`), **joined** with `=` (`--output=/tmp/loot`) or **hidden in a
+   short cluster** (`-fsSo /tmp/loot`) is refused: a value-taking option must
+   stand alone and its value must be the next argument. Clustering is allowed
+   only for the value-less letters, so `-fsS` still works. `-w` is allowlisted
+   and its VALUE is checked too: `@file` (a format read from disk) and
+   `%output{...}` (curl >= 8.3 writes a file from the format string) are
+   refused. And because curl reads `file://` and `scp://` as happily as it
+   reads HTTP, the URL scheme is checked rather than assumed.
+
+   This replaced a blocklist, and the difference was measured on curl 8.5.0:
+   `-o/tmp/loot.txt`, `-fsSo /tmp/loot.txt`, `--data-ascii @/etc/hostname`
+   (which POSTs the content of a local file to the remote host and writes
+   nothing at all), `--json`, `-D`, `--dump-header`, `--trace-ascii`,
+   `--stderr`, `-c`, `--cookie-jar`, `--etag-save`, `--remote-name-all` and
+   `--form-string` all walked past a list naming `-O`, `-T`, `-d`, `-F` and
+   `--config`, and all were reported **OK**. Widening any of these lists is a
+   code edit on purpose: it gets reviewed.
+
+   `-w`, in practice, is nearly always refused earlier by rule 1: curl's
+   variables are written `%{http_code}`, and braces are shell metacharacters.
+   The rule is there so the guarantee does not rest on that coincidence.
+
+   A binary added to `HARNESS_SENTINEL_PROBE_ALLOW` with no rule of its own
+   runs with its arguments **unchecked**. Adding one is a deliberate act, and
+   it is worth writing the rule that goes with it.
 
 If a probe genuinely needs a shell -- a variable, a glob, a pipeline -- put it
 in a script of your own and put that script's name in the allowlist. That is a
@@ -282,7 +319,8 @@ that is a FAIL.
 |---|---|
 | `sentinel/sentinel.py` | the whole module, stdlib only |
 | `sentinel/probes.example.txt` | EXAMPLE site-specific probe file |
-| `tests/test_sentinel.py` | 20 cases, zero network, tempdir harness |
+| `hooks/_exec_guard.py` | the probe execution guard, SHARED with recall's `check:` field |
+| `tests/test_sentinel.py` | 40 cases, no outbound network, tempdir harness |
 
 ## Journal vocabulary
 

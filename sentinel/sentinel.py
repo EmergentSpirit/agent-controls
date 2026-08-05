@@ -65,7 +65,6 @@ import os
 import py_compile
 import re
 import shlex
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -86,6 +85,20 @@ except Exception:  # MANDATORY fallback: mirrors the helper's own defaults.
 
     def gate_stat(*a, **k):
         pass
+
+# The probe family EXECUTES lines from a config file: its guard is not
+# optional. Fail-open protects the operator's WORK from a broken gate; there
+# is no work to protect here, and the only thing that would keep running is
+# unchecked execution. So a missing guard closes the probe family (every line
+# becomes a SKIP carrying that reason, never a silence) and the four other
+# families still produce their report.
+EXEC_GUARD_ERROR = ""
+try:
+    from _exec_guard import SHELL_META_RE, binary_refusal
+except Exception as exc:
+    EXEC_GUARD_ERROR = "%s: %s" % (type(exc).__name__, exc)
+    SHELL_META_RE = None
+    binary_refusal = None
 
 DEFAULT_SETTINGS_GLOB = os.path.join(
     os.path.expanduser("~"), ".claude", "*settings*.json")
@@ -537,41 +550,16 @@ def check_coverage(hooks, days, exempt, report):
 
 # --- family: probe (optional, site-specific) --------------------------------
 
-_SHELL_META_RE = re.compile(r"[;&|<>`$(){}\[\]!*?~\\]")
-
-SYSTEMCTL_RO_VERBS = {"is-active", "is-enabled", "is-failed", "status", "show",
-                      "list-units", "list-timers"}
-CURL_FORBIDDEN_OPTS = {"-O", "--remote-name", "-T", "--upload-file",
-                       "-d", "--data", "--data-raw", "--data-binary",
-                       "--data-urlencode", "-F", "--form", "-K", "--config"}
-
-
+# The rule itself lives in hooks/_exec_guard.py, and it is the SAME OBJECT
+# recall imports for its `check:` field -- not a copy of it, not "the same by
+# construction". It was two copies once: the curl blocklist became an
+# allowlist here while the recall copy kept every hole, for the length of one
+# commit. What is shared is the allowlist of options per binary and the
+# binary-resolution rule; the outcome vocabulary stays local to each caller
+# (SKIP here, refused there).
 def probe_refusal(argv, allow):
     """None when this argv may run, otherwise the reason it may not."""
-    base = os.path.basename(argv[0])
-    if base not in allow:
-        return "'%s' is not in the allowlist %s" % (base, sorted(allow))
-    canonical = shutil.which(base)
-    if canonical is None:
-        return "binary not on PATH: %s" % base
-    if "/" in argv[0]:
-        try:
-            if os.path.realpath(argv[0]) != os.path.realpath(canonical):
-                return "non-canonical path: %s" % argv[0]
-        except OSError:
-            return "unresolvable path: %s" % argv[0]
-    if base == "systemctl":
-        verbs = [a for a in argv[1:] if not a.startswith("-")]
-        if not verbs or verbs[0] not in SYSTEMCTL_RO_VERBS:
-            return "systemctl: verb is not read-only: %s" % (verbs[:1] or "?")
-    if base == "curl":
-        args = argv[1:]
-        for i, a in enumerate(args):
-            if a in CURL_FORBIDDEN_OPTS:
-                return "curl: forbidden option: %s" % a
-            if a in ("-o", "--output") and args[i + 1:i + 2] != ["/dev/null"]:
-                return "curl: -o pointing somewhere other than /dev/null"
-    return None
+    return binary_refusal(argv, allow)
 
 
 def probe_argv(command, allow):
@@ -581,7 +569,9 @@ def probe_argv(command, allow):
     in the loop, so a single unclosed quote anywhere in the probe file raised
     all the way to the module's fail-open handler: no dated report written at
     all, and not one other family run. A malformed line must cost that line."""
-    if _SHELL_META_RE.search(command):
+    if EXEC_GUARD_ERROR:
+        return (None, "exec guard unavailable, nothing runs: %s" % EXEC_GUARD_ERROR)
+    if SHELL_META_RE.search(command):
         return (None, "shell metacharacter: a probe line is an argv, not a shell line")
     try:
         argv = shlex.split(command)
@@ -598,22 +588,32 @@ def run_probes(path, allow, report):
     a timer job, and a config file must never become an arbitrary execution
     surface. Everything else becomes a SKIP line, never a silence.
 
-    This is the same constraint, and deliberately the same CODE, as recall's
-    `check:` field (recall/recall.py, run_check). It was not always so, and the
-    gap was measured: the first word was matched against the allowlist, then
-    the WHOLE LINE was handed to `bash -c`, so `test -d /tmp; echo PWNED >
-    /somewhere` passed the check on `test` and ran the half after the
-    semicolon. Allowlisting the head of a string you then give to a shell
-    protects exactly nothing.
+    This is the same constraint as recall's `check:` field, and since
+    2026-08-05 it is literally the same code: both import
+    hooks/_exec_guard.py. Saying "the same by construction" while keeping two
+    copies is how the two drifted -- the copies were fixed one at a time, and
+    for the length of one commit the recall side still accepted `-o/tmp/loot`.
+
+    The first hole was measured earlier and in the other direction: the first
+    word was matched against the allowlist, then the WHOLE LINE was handed to
+    `bash -c`, so `test -d /tmp; echo PWNED > /somewhere` passed the check on
+    `test` and ran the half after the semicolon. Allowlisting the head of a
+    string you then give to a shell protects exactly nothing.
 
     Defense in depth, in order:
       1. no shell metacharacter allowed (and no shell at all: shell=False);
       2. the ALLOWLIST applies to argv[0], and when it is given as a path it
          must resolve to the SAME binary as `which <basename>` (a planted
          /tmp/test does not pass);
-      3. PER-BINARY rules: systemctl restricted to read-only verbs, curl with
-         no disk write and no upload. `systemctl --user stop x` and
-         `curl -o /tmp/x` must be refused, not only `rm` and `bash`.
+      3. PER-BINARY rules, ALLOWLISTS as well: each binary declares the options
+         it may receive and everything else is refused, including a value
+         glued to its flag, joined with "=", or hidden in a short cluster.
+         curl is held to read-only options plus one http(s) URL, systemctl to
+         read-only verbs and value-less flags, test to one operator and one
+         absolute path. This used to be a blocklist of forbidden options, and
+         `-o/tmp/loot`, `-fsSo /tmp/loot` and `--data-ascii @/etc/hostname`
+         (the content of a local file POSTed to the remote host) all walked
+         past it and were reported OK. See _exec_guard.py for the lists.
 
     This is where site-specific checks live -- a service unit, an HTTP probe,
     a mount point. None of that ships in the harness, because none of it is

