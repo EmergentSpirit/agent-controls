@@ -1,0 +1,65 @@
+{
+  "_comment": [
+    "EXAMPLE wiring for the 'builder' role: a write-heavy agent that mutates",
+    "code, config and infrastructure. It carries the full mutation battery.",
+    "Copy this file, replace $HARNESS_HOME with the absolute path where you",
+    "cloned the harness, and point your launcher at it.",
+    "Every gate here is fail-open: a gate that crashes never blocks the flow.",
+    "Every gate journals every execution to $HARNESS_GATE_STATS, which is what",
+    "lets the sentinel prove a wired gate is actually alive."
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/hooks/home-prefix-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/hooks/grep-quantifier-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/hooks/destructive-command-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/hooks/hook-retire-gate.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/hooks/interlock-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/hooks/settings-go-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/hooks/shell-false-success-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/hooks/destructive-dry-run-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/hooks/isolated-llm-measure-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/memory/memory-verdict-gate.py"
+          }
+        ]
+      }
+    ]
+  }
+}

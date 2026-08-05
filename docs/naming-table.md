@@ -33,6 +33,8 @@ after batch 1 require a justification in the batch handoff.
 | `HARNESS_DESTRUCTIVE_COMMAND_FAMILIES` | Armed destructive families, comma-separated | `1,2,6` |
 | `HARNESS_DESTRUCTIVE_COMMAND_SECRET_FILES` | Colon-separated secret-bearing filename markers | `.secrets:.age:authorized_keys:known_hosts` |
 | `HARNESS_DESTRUCTIVE_COMMAND_EXTRA_PATTERNS` | Extra deny regexes, one per line | empty |
+| `HARNESS_SCOPE_WRITE_STAMP` | Path of the scope-bypass stamp file | `$HARNESS_STATE_DIR/scope-write.stamp` |
+| `HARNESS_INTERLOCK_SCRATCH_DIRS` | Colon-separated scratch dirs exempt from interlock | system temp + `/tmp` + `/var/tmp` |
 | `HARNESS_<GATE_NAME>_GATE_DISABLE` | Per-gate session kill-switch (`=1`) | unset |
 
 A kill-switch is deliberate and never silent: the gate lets the hit through
