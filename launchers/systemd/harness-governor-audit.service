@@ -23,7 +23,7 @@ Description=Harness governor -- weekly gate audit by exception, then close due t
 Type=oneshot
 
 Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=HARNESS_HOME=%h/harness
+Environment=HARNESS_HOME=%h/agent-controls
 Environment=HARNESS_STATE_DIR=%h/.harness
 
 # Which settings files define the LIVE battery being audited.
@@ -34,12 +34,12 @@ Environment=HARNESS_GOVERNOR_SETTINGS=%h/.harness/settings.builder.json
 # unit file (unit files are world-readable by default).
 # Environment=HARNESS_JUDGE2_API_KEY_ENV=EXAMPLE_API_KEY
 
-WorkingDirectory=%h/harness
+WorkingDirectory=%h/agent-controls
 
 # The audit is deterministic: it reads the gate-stats journal and writes a
 # decision page ONLY when a decision is pending.
-ExecStart=/usr/bin/python3 %h/harness/governor/audit.py
+ExecStart=/usr/bin/python3 %h/agent-controls/governor/audit.py
 
 # Then close the observation trials whose window has ended. ExecStartPost runs
 # after the audit and its own failure does not mask the audit's result.
-ExecStartPost=/usr/bin/python3 %h/harness/governor/trial.py
+ExecStartPost=/usr/bin/python3 %h/agent-controls/governor/trial.py

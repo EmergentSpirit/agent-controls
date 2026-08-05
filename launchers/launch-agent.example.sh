@@ -32,7 +32,7 @@ exception: "builder" loads settings.example.json, the canonical file the
 test suites check.
 
 Environment (all optional, all with a default):
-  HARNESS_HOME              harness checkout (default: parent of this file)
+  HARNESS_HOME              agent-controls checkout (default: parent of this file)
   HARNESS_STATE_DIR         state directory (default: ~/.harness)
   HARNESS_WORKSPACE         directory the agent starts in (default: $PWD)
   HARNESS_WRITE_SCOPE       write perimeter (default: the workspace)

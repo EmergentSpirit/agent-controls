@@ -202,7 +202,7 @@ default is the narrow choice:
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `HARNESS_HOME` | Harness checkout | parent directory of the launcher |
+| `HARNESS_HOME` | agent-controls checkout | parent directory of the launcher |
 | `HARNESS_AGENT` | Role name for this pane | the role argument |
 | `HARNESS_STATE_DIR` | State directory | `~/.harness` |
 | `HARNESS_WORKSPACE` | Directory the agent starts in | `$PWD` |

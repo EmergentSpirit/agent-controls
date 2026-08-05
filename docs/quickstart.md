@@ -1,9 +1,9 @@
 # Quickstart -- 15 minutes, from clone to a gate that bites
 
 Everything below was run end to end before it was written down, in a throwaway
-tree at `/tmp/harness-quickstart`. Every output on this page is the real output
-of the command above it. Paste the commands as they are and you should see the
-same thing, modulo timestamps and paths.
+tree at `/tmp/agent-controls-quickstart`. Every output on this page is the real
+output of the command above it. Paste the commands as they are and you should
+see the same thing, modulo timestamps and paths.
 
 **Requirements:** `python3` (3.10 or newer), `git`. Nothing else. The harness
 itself has zero third-party dependency; `pytest` is needed only to run the test
@@ -21,8 +21,8 @@ only present.
 Nothing in this repository is armed by cloning it. A checkout is inert.
 
 ```sh
-mkdir -p /tmp/harness-quickstart && cd /tmp/harness-quickstart
-git clone <the repository URL> harness
+mkdir -p /tmp/agent-controls-quickstart && cd /tmp/agent-controls-quickstart
+git clone https://github.com/EmergentSpirit/agent-controls.git
 python3 -V
 ```
 
@@ -36,18 +36,18 @@ product's argument: a module without its suite does not ship here.
 ```sh
 python3 -m venv .venv
 .venv/bin/pip install pytest
-cd /tmp/harness-quickstart/harness
+cd /tmp/agent-controls-quickstart/agent-controls
 ../.venv/bin/python -m pytest tests/ -q
 ```
 
 ```
-..................................... [ 14%]
-................................. [ 26%]
-......................................................... [ 48%]
-................................................ [ 66%]
-...................................................... [ 86%]
-...................................                     [100%]
-313 passed, 179 subtests passed in 29.74s
+..................................... [ 11%]
+........................... [ 20%]
+............................................. [ 34%]
+............................................................................................................... [ 70%]
+.................................................. [ 86%]
+...........................................             [100%]
+313 passed, 179 subtests passed in 29.67s
 ```
 
 The suites themselves make zero network call and use no API key: every LLM judge
@@ -61,23 +61,23 @@ only third-party package involved anywhere.
 Four variables. They are the whole configuration surface for this walkthrough.
 
 ```sh
-cd /tmp/harness-quickstart
+cd /tmp/agent-controls-quickstart
 mkdir -p demo/.claude state
 
-export HARNESS_HOME=/tmp/harness-quickstart/harness      # the checkout
-export HARNESS_STATE_DIR=/tmp/harness-quickstart/state   # where state lives
-export HARNESS_HOOK_DIRS=$HARNESS_HOME/hooks             # dirs holding live hooks
-export HARNESS_WRITE_SCOPE=/tmp/harness-quickstart/demo  # this agent's perimeter
+export HARNESS_HOME=/tmp/agent-controls-quickstart/agent-controls  # the checkout
+export HARNESS_STATE_DIR=/tmp/agent-controls-quickstart/state      # where state lives
+export HARNESS_HOOK_DIRS=$HARNESS_HOME/hooks                       # dirs holding live hooks
+export HARNESS_WRITE_SCOPE=/tmp/agent-controls-quickstart/demo     # this agent's perimeter
 
-cd /tmp/harness-quickstart/demo
+cd /tmp/agent-controls-quickstart/demo
 printf '%s\n' "$HARNESS_HOME" "$HARNESS_STATE_DIR" "$HARNESS_HOOK_DIRS" "$HARNESS_WRITE_SCOPE"
 ```
 
 ```
-/tmp/harness-quickstart/harness
-/tmp/harness-quickstart/state
-/tmp/harness-quickstart/harness/hooks
-/tmp/harness-quickstart/demo
+/tmp/agent-controls-quickstart/agent-controls
+/tmp/agent-controls-quickstart/state
+/tmp/agent-controls-quickstart/agent-controls/hooks
+/tmp/agent-controls-quickstart/demo
 ```
 
 `HARNESS_STATE_DIR` matters more than it looks. **State never lives in the
@@ -128,9 +128,9 @@ python3 $HARNESS_HOME/sentinel/sentinel.py --settings .claude/settings.json --en
 ```
 
 ```
-hook  PreToolUse         script     /tmp/harness-quickstart/harness/hooks/home-prefix-gate.py
-hook  PreToolUse         script     /tmp/harness-quickstart/harness/hooks/destructive-command-gate.py
-hook  PreToolUse         script     /tmp/harness-quickstart/harness/hooks/scope-write-gate.py
+hook  PreToolUse         script     /tmp/agent-controls-quickstart/agent-controls/hooks/home-prefix-gate.py
+hook  PreToolUse         script     /tmp/agent-controls-quickstart/agent-controls/hooks/destructive-command-gate.py
+hook  PreToolUse         script     /tmp/agent-controls-quickstart/agent-controls/hooks/scope-write-gate.py
 total: 3 hooks wired across 1 settings file(s)
 ```
 
@@ -222,19 +222,19 @@ authorization that leaves no trace is an authorization nobody can audit.
 `scope-write-gate` refuses a write landing outside `HARNESS_WRITE_SCOPE`.
 
 ```sh
-echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/harness-quickstart/elsewhere/notes.md","content":"x"}}' \
+echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/agent-controls-quickstart/elsewhere/notes.md","content":"x"}}' \
   | python3 $HARNESS_HOME/hooks/scope-write-gate.py
 echo "exit=$?"
 ```
 
 ```
 BLOCKED (scope-write gate): writing OUTSIDE this agent's perimeter.
-  target:    /tmp/harness-quickstart/elsewhere/notes.md
-  perimeter: /tmp/harness-quickstart/demo
+  target:    /tmp/agent-controls-quickstart/elsewhere/notes.md
+  perimeter: /tmp/agent-controls-quickstart/demo
 Each role owns a perimeter. Writing code or mutating configuration outside it is another role's gesture, and that drift is silent: it looks like work done, it lands where nobody reviews it.
 Normal route: leave a dated deliverable INSIDE your perimeter and hand the gesture over to the role that owns it.
 Sanctioned one-shot, only AFTER an explicit human GO:
-  python3 /tmp/harness-quickstart/harness/hooks/scope-stamp.py <prefix> --reason '...'
+  python3 /tmp/agent-controls-quickstart/agent-controls/hooks/scope-stamp.py <prefix> --reason '...'
 (30-minute window, ONE prefix, journaled as skip-stamp.)
 Widen the perimeter for good instead: HARNESS_WRITE_SCOPE (colon-separated).
 Session kill-switch: HARNESS_SCOPE_WRITE_GATE_DISABLE=1
@@ -251,11 +251,11 @@ cat $HARNESS_STATE_DIR/gate-stats.jsonl
 ```
 
 ```
-{"ts": "2026-08-05T12:06:42", "hook": "home-prefix", "result": "pass"}
-{"ts": "2026-08-05T12:06:42", "hook": "home-prefix", "result": "block", "cmd": "HOME=/tmp/elsewhere python3 -c \"print(1)\""}
-{"ts": "2026-08-05T12:06:42", "hook": "destructive-command", "result": "block", "pattern": "privilege escalation: sudo"}
-{"ts": "2026-08-05T12:06:42", "hook": "destructive-command", "result": "skip-authorized"}
-{"ts": "2026-08-05T12:06:42", "hook": "scope-write", "result": "block", "path": "/tmp/harness-quickstart/elsewhere/notes.md"}
+{"ts": "2026-08-05T14:59:22", "hook": "home-prefix", "result": "pass"}
+{"ts": "2026-08-05T14:59:22", "hook": "home-prefix", "result": "block", "cmd": "HOME=/tmp/elsewhere python3 -c \"print(1)\""}
+{"ts": "2026-08-05T14:59:22", "hook": "destructive-command", "result": "block", "pattern": "privilege escalation: sudo"}
+{"ts": "2026-08-05T14:59:23", "hook": "destructive-command", "result": "skip-authorized"}
+{"ts": "2026-08-05T14:59:23", "hook": "scope-write", "result": "block", "path": "/tmp/agent-controls-quickstart/elsewhere/notes.md"}
 ```
 
 Five lines, five executions, and the fourth one is the authorization you granted
@@ -280,22 +280,22 @@ echo "exit=$?"
 ```
 
 ```
-# sentinel -- 2026-08-05 12:06 -- 0.0 s
+# sentinel -- 2026-08-05 14:59 -- 0.0 s
 OK   settings  settings.json - 3 hooks wired
 OK   script    home-prefix-gate.py - present, syntax OK (settings.json)
 OK   script    destructive-command-gate.py - present, syntax OK (settings.json)
 OK   script    scope-write-gate.py - present, syntax OK (settings.json)
-WARN orphan    destructive-dry-run-gate.py - on disk in /tmp/harness-quickstart/harness/hooks but wired in NO settings file
-WARN orphan    grep-quantifier-gate.py - on disk in /tmp/harness-quickstart/harness/hooks but wired in NO settings file
-WARN orphan    hook-retire-gate.py - on disk in /tmp/harness-quickstart/harness/hooks but wired in NO settings file
-WARN orphan    interlock-gate.py - on disk in /tmp/harness-quickstart/harness/hooks but wired in NO settings file
+WARN orphan    destructive-dry-run-gate.py - on disk in /tmp/agent-controls-quickstart/agent-controls/hooks but wired in NO settings file
+WARN orphan    grep-quantifier-gate.py - on disk in /tmp/agent-controls-quickstart/agent-controls/hooks but wired in NO settings file
+WARN orphan    hook-retire-gate.py - on disk in /tmp/agent-controls-quickstart/agent-controls/hooks but wired in NO settings file
+WARN orphan    interlock-gate.py - on disk in /tmp/agent-controls-quickstart/agent-controls/hooks but wired in NO settings file
 SKIP orphan    interlock-stamp.py - exempt, run by hand by design
-WARN orphan    isolated-llm-measure-gate.py - on disk in /tmp/harness-quickstart/harness/hooks but wired in NO settings file
-WARN orphan    response-length-gate.py - on disk in /tmp/harness-quickstart/harness/hooks but wired in NO settings file
+WARN orphan    isolated-llm-measure-gate.py - on disk in /tmp/agent-controls-quickstart/agent-controls/hooks but wired in NO settings file
+WARN orphan    response-length-gate.py - on disk in /tmp/agent-controls-quickstart/agent-controls/hooks but wired in NO settings file
 SKIP orphan    scope-stamp.py - exempt, run by hand by design
-WARN orphan    settings-go-gate.py - on disk in /tmp/harness-quickstart/harness/hooks but wired in NO settings file
-WARN orphan    shell-false-success-gate.py - on disk in /tmp/harness-quickstart/harness/hooks but wired in NO settings file
-WARN orphan    workflow-gate.py - on disk in /tmp/harness-quickstart/harness/hooks but wired in NO settings file
+WARN orphan    settings-go-gate.py - on disk in /tmp/agent-controls-quickstart/agent-controls/hooks but wired in NO settings file
+WARN orphan    shell-false-success-gate.py - on disk in /tmp/agent-controls-quickstart/agent-controls/hooks but wired in NO settings file
+WARN orphan    workflow-gate.py - on disk in /tmp/agent-controls-quickstart/agent-controls/hooks but wired in NO settings file
 OK   journal   gate-stats.jsonl - fresh (0.0 h), last line valid JSON
 OK   coverage  home-prefix-gate.py - 2 trace(s) in the journal over 7 days
 OK   coverage  destructive-command-gate.py - 2 trace(s) in the journal over 7 days
@@ -327,7 +327,7 @@ tail -1 $HARNESS_STATE_DIR/gate-stats.jsonl
 
 ```
 2026-08-05.txt
-{"ts": "2026-08-05T12:06:42", "hook": "sentinel", "result": "observe", "verdict": "WARN", "ok": 8, "warn": 9, "fail": 0, "skip": 2, "hooks": 3, "settings": 1}
+{"ts": "2026-08-05T14:59:23", "hook": "sentinel", "result": "observe", "verdict": "WARN", "ok": 8, "warn": 9, "fail": 0, "skip": 2, "hooks": 3, "settings": 1}
 ```
 
 `observe` because the sentinel blocks nothing. It reads, it reports, a human
@@ -355,7 +355,7 @@ python3 $HARNESS_HOME/sentinel/sentinel.py --settings .claude/settings.json \
 
 ```
 destructive-command-gate unwired from settings.json
-WARN orphan    destructive-command-gate.py - on disk in /tmp/harness-quickstart/harness/hooks but wired in NO settings file
+WARN orphan    destructive-command-gate.py - on disk in /tmp/agent-controls-quickstart/agent-controls/hooks but wired in NO settings file
 VERDICT WARN - 6 OK / 10 WARN / 0 FAIL / 2 SKIP
 ```
 
@@ -366,7 +366,7 @@ inventory that can be trusted is the one the system itself declares.
 ## Clean up
 
 ```sh
-rm -rf /tmp/harness-quickstart
+rm -rf /tmp/agent-controls-quickstart
 ```
 
 Nothing was installed, no unit was enabled, nothing outside that directory was

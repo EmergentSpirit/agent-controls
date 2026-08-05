@@ -246,7 +246,7 @@ Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HARNESS_STATE_DIR=%h/.harness
 Environment=HARNESS_WATCH_TRANSCRIPTS=builder=%h/.claude/projects/builder
 Environment=HARNESS_WATCH_EXCLUDE=private-role
-ExecStart=/usr/bin/python3 %h/harness/watch/server.py
+ExecStart=/usr/bin/python3 %h/agent-controls/watch/server.py
 Restart=on-failure
 
 [Install]
@@ -277,7 +277,7 @@ the panel:
 ```cron
 # EXAMPLE -- same PATH caveat as systemd: cron gets a minimal environment.
 15 6 * * * HARNESS_STATE_DIR=$HOME/.harness /usr/bin/python3 \
-  $HOME/harness/watch/indexer.py
+  $HOME/agent-controls/watch/indexer.py
 ```
 
 ## Files

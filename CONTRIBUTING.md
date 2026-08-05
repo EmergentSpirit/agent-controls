@@ -394,12 +394,18 @@ grep -rlP "[\x{00C0}-\x{024F}]" --include='*' . | grep -v '^./.git/'
 ```
 
 That range covers every accented Latin letter, and it currently matches nothing
-in the tree. The only non-ASCII characters in the repository today are
-typographic (em dash, ellipsis, arrow, the box-drawing rules some docstrings
-use, guillemets in the secret-masking placeholder) and the four
-statutory-memory status markers, which are part of a documented format. Do not
-add new ones, and never add a localized string: a block message is read by a
-model, and an operator, and a grep.
+in the tree. The non-ASCII characters that do live here are typographic or part
+of a documented format, and the whole inventory is one command away:
+
+```sh
+grep -rohP "[^\x00-\x7F]" --include='*' . | sort -u | tr -d '\n'
+# « · » — … → ─ ⚠ ⛔ 🌙 🔁
+```
+
+Guillemets belong to the secret-masking placeholder, the last four are the
+statutory-memory status markers, and the rest is punctuation. Do not add new
+ones, and never add a localized string: a block message is read by a model, and
+an operator, and a grep.
 
 **No identity, no secret, no private path.** No personal name, no hostname, no
 IP, no `/home/<someone>`, no API key, not even in a comment or a test fixture.

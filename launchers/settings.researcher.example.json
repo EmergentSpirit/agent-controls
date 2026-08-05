@@ -4,7 +4,7 @@
     "widely and writes narrowly (reports, notes). It carries a scope perimeter",
     "and an output ceiling instead of the full mutation battery.",
     "Copy this file, replace $HARNESS_HOME with the absolute path where you",
-    "cloned the harness, and set HARNESS_WRITE_SCOPE to this role's perimeter.",
+    "cloned agent-controls, and set HARNESS_WRITE_SCOPE to this role's perimeter.",
     "Every gate here is fail-open and journals every execution."
   ],
   "hooks": {

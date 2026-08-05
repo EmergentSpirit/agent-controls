@@ -245,7 +245,7 @@ Description=Harness sentinel, daily health check
 [Service]
 Type=oneshot
 Environment=HARNESS_STATE_DIR=%h/.harness
-ExecStart=/usr/bin/python3 %h/harness/sentinel/sentinel.py \
+ExecStart=/usr/bin/python3 %h/agent-controls/sentinel/sentinel.py \
   --settings %h/.claude/settings.json
 ```
 
@@ -278,7 +278,7 @@ next boot instead of skipping the day in silence.
 ```cron
 # EXAMPLE -- daily health check, 06:30, output goes to the report file.
 30 6 * * * HARNESS_STATE_DIR=$HOME/.harness /usr/bin/python3 \
-  $HOME/harness/sentinel/sentinel.py --settings $HOME/.claude/settings.json --quiet
+  $HOME/agent-controls/sentinel/sentinel.py --settings $HOME/.claude/settings.json --quiet
 ```
 
 Cron runs with a minimal environment. Anything the sentinel needs

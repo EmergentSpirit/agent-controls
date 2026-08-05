@@ -1,6 +1,10 @@
-# harness
+# agent-controls
 
 **Discipline for coding agents, armed rather than promised.**
+
+A file-based control harness: deterministic gates on what an agent does,
+a journal that proves they ran, and a governor that decides which rules
+earn their place.
 
 Every team that works with a coding agent writes the same document. Always
 verify before claiming. Never delete without a backup. Do not rewrite the
@@ -83,7 +87,8 @@ Everything follows from that:
 ## Start here
 
 ```bash
-git clone <this-repo> ~/harness && cd ~/harness
+git clone https://github.com/EmergentSpirit/agent-controls.git
+cd agent-controls
 python3 -m pytest tests/ -q         # 313 tests, no outbound network, no install
 ```
 

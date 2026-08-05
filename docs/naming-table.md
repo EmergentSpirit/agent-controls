@@ -113,7 +113,7 @@ transcripts removes them retroactively, and its gate journals stay indexed.
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `HARNESS_HOME` | Absolute path of the harness checkout | required |
+| `HARNESS_HOME` | Absolute path of the agent-controls checkout | required |
 | `HARNESS_WORKSPACE` | Working directory the agent starts in | `$PWD` |
 | `HARNESS_SETTINGS` | Settings file used as-is | rendered from the example |
 | `HARNESS_CLI` | Agent CLI binary to exec | first of `HARNESS_LLM_CLI_NAMES` |

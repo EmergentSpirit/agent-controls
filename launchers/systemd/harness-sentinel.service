@@ -31,16 +31,16 @@ Type=oneshot
 # %h expands to the invoking user's home directory: no absolute home path is
 # ever hard-coded in these examples.
 Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=HARNESS_HOME=%h/harness
+Environment=HARNESS_HOME=%h/agent-controls
 Environment=HARNESS_STATE_DIR=%h/.harness
 
-WorkingDirectory=%h/harness
+WorkingDirectory=%h/agent-controls
 
 # --settings takes one or more files: point it at the settings your agents
 # ACTUALLY load. The launcher renders one per role into the state directory
 # ($HARNESS_STATE_DIR/settings.<role>.json), so add the roles you run.
 # --quiet writes the daily report without printing it into the journal.
-ExecStart=/usr/bin/python3 %h/harness/sentinel/sentinel.py \
+ExecStart=/usr/bin/python3 %h/agent-controls/sentinel/sentinel.py \
     --settings %h/.harness/settings.builder.json \
     --quiet
 

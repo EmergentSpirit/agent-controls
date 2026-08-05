@@ -1,7 +1,7 @@
 # EXAMPLE user unit -- NOT shipped armed. Copy it to
 # ~/.config/systemd/user/, adjust the paths, then:
 #
-#   chmod +x ~/harness/recall/recall-refresh.sh
+#   chmod +x ~/agent-controls/recall/recall-refresh.sh
 #   systemctl --user daemon-reload
 #   systemctl --user enable --now harness-recall-refresh.timer
 #
@@ -25,7 +25,7 @@ Description=Harness recall -- rebuild the file-existence index, then the health 
 Type=oneshot
 
 Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=HARNESS_HOME=%h/harness
+Environment=HARNESS_HOME=%h/agent-controls
 Environment=HARNESS_STATE_DIR=%h/.harness
 
 # Optional: index a subtree instead of the whole home directory.
@@ -35,4 +35,4 @@ Environment=HARNESS_STATE_DIR=%h/.harness
 Nice=10
 IOSchedulingClass=idle
 
-ExecStart=%h/harness/recall/recall-refresh.sh
+ExecStart=%h/agent-controls/recall/recall-refresh.sh

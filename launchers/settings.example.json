@@ -3,7 +3,7 @@
     "EXAMPLE wiring for the 'builder' role: a write-heavy agent that mutates",
     "code, config and infrastructure. It carries the full mutation battery.",
     "Copy this file, replace $HARNESS_HOME with the absolute path where you",
-    "cloned the harness, and point your launcher at it.",
+    "cloned agent-controls, and point your launcher at it.",
     "Every gate here is fail-open: a gate that crashes never blocks the flow.",
     "Every gate journals every execution to $HARNESS_GATE_STATS, which is what",
     "lets the sentinel prove a wired gate is actually alive."
