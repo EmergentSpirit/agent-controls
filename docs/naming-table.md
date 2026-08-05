@@ -35,6 +35,12 @@ after batch 1 require a justification in the batch handoff.
 | `HARNESS_DESTRUCTIVE_COMMAND_EXTRA_PATTERNS` | Extra deny regexes, one per line | empty |
 | `HARNESS_SCOPE_WRITE_STAMP` | Path of the scope-bypass stamp file | `$HARNESS_STATE_DIR/scope-write.stamp` |
 | `HARNESS_INTERLOCK_SCRATCH_DIRS` | Colon-separated scratch dirs exempt from interlock | system temp + `/tmp` + `/var/tmp` |
+| `HARNESS_SHIELD_REGISTRY` | Shield trigger registry path | `shield/trigger-registry.example.yaml` |
+| `HARNESS_SHIELD_RUBRIC` | Shield standing-invariants file | `shield/reviewer-rubric.example.md` |
+| `HARNESS_SHIELD_FRESHNESS` | Lifetime of the layer-1 marker, seconds | `2700` |
+| `HARNESS_SHIELD_TIMEOUT` | Hard timeout of the shield judge call, seconds | `12` |
+| `HARNESS_SHIELD_MODEL` | Model alias for the shield judge | `haiku` |
+| `HARNESS_SHIELD_FAKE_VERDICT` | TEST ONLY: fixed verdict replacing the judge | unset |
 | `HARNESS_<GATE_NAME>_GATE_DISABLE` | Per-gate session kill-switch (`=1`) | unset |
 
 A kill-switch is deliberate and never silent: the gate lets the hit through

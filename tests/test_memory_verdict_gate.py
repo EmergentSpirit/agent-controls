@@ -103,6 +103,35 @@ class TestMemoryVerdictGate(unittest.TestCase):
         self.assertEqual(r7.returncode, 2, r7.stderr)
         self.assertIn("status", r7.stderr)
 
+    def last_stat(self):
+        return json.loads(
+            self.stats.read_text(encoding="utf-8").strip().splitlines()[-1])
+
+    def test_t8_unreadable_payload_fails_open_and_says_so(self):
+        """A crashing gate must still journal: one that dies silently is
+        invisible to the sentinel's aliveness check, which is how a dead gate
+        goes on lying about being armed."""
+        env = dict(os.environ, **self.env)
+        r = subprocess.run([sys.executable, str(HOOK)], input="not json{{{",
+                           capture_output=True, text=True, env=env, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.last_stat()["result"], "fail-open")
+
+    def test_t9_kill_switch_is_deliberate_and_traced(self):
+        """The kill-switch lets a note through that would otherwise block, and
+        leaves a trace. The control matters: the SAME note without the switch
+        must still block, otherwise this proves nothing."""
+        note = "no frontmatter at all\n"
+        payload = self.payload_write("t9.md", note)
+
+        armed = run_hook(payload, self.env)
+        self.assertEqual(armed.returncode, 2, "control: this note must block")
+
+        off = run_hook(payload, {**self.env,
+                                 "HARNESS_MEMORY_VERDICT_GATE_DISABLE": "1"})
+        self.assertEqual(off.returncode, 0, off.stderr)
+        self.assertEqual(self.last_stat()["result"], "skip-disabled")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

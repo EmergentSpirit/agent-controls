@@ -8,6 +8,17 @@
     "Every gate here is fail-open and journals every execution."
   ],
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/shield/shield-inject.py --agent researcher"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -52,6 +63,10 @@
           {
             "type": "command",
             "command": "python3 $HARNESS_HOME/hooks/response-length-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/shield/shield-reviewer.py --agent researcher"
           }
         ]
       }

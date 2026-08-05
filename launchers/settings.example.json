@@ -9,6 +9,28 @@
     "lets the sentinel prove a wired gate is actually alive."
   ],
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/shield/shield-inject.py --agent builder"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HARNESS_HOME/shield/shield-reviewer.py --agent builder"
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",

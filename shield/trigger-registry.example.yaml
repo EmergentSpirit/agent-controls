@@ -1,0 +1,49 @@
+# EXAMPLE trigger registry -- shield layer 1.
+#
+# EVERY entry below is invented to show the FORMAT. None of them comes from a
+# real post-mortem, and a trigger that comes from nowhere is noise: copy this
+# file, delete the examples, and add an entry only when an incident earned it.
+# Point HARNESS_SHIELD_REGISTRY at your copy.
+#
+# One entry per trigger, four fields:
+#   pattern  regex matched case-insensitively against the operator's prompt
+#   rule     the one or two lines injected into the turn when it matches
+#   memory   slug of the memory note the rule comes from (its source of truth)
+#   active   false parks an entry without deleting it -- the reason it existed
+#            stays readable, which a deletion destroys
+#
+# Single-quote the patterns: YAML processes backslash escapes inside double
+# quotes, and a regex is mostly backslashes. Keep every value on ONE line: the
+# built-in fallback parser (used when PyYAML is not installed) reads the
+# single-line scalar subset only.
+
+triggers:
+  - pattern: 'deploy(ing)? to prod|push to production|ship it live|go live'
+    rule: 'Production mutation ahead. State the blast radius and the rollback BEFORE running anything, then wait for an explicit go.'
+    memory: production-mutation-states-its-rollback
+    active: true
+
+  - pattern: 'delete (the|all|these)|drop (table|database)|wipe|purge (the|all)'
+    rule: 'Destructive on data. Reversible first: disable, rename or archive. If a real delete is the only option, the backup is verified BEFORE, not promised after.'
+    memory: reversible-before-destructive
+    active: true
+
+  - pattern: 'that (does not|doesn.t) match|contradicts|the numbers disagree|not what I expected'
+    rule: 'A measurement contradicts the hypothesis. Report the contradiction as the result. Do not reconcile it with a story, and do not re-run until it agrees.'
+    memory: a-contradicted-hypothesis-is-a-result
+    active: true
+
+  - pattern: 'where is|where are|which file|find me the'
+    rule: 'Locating question. Answer with the location, in one line. Opening the file, fixing what is inside it or starting a cleanup was not asked for.'
+    memory: a-locating-question-gets-a-location
+    active: true
+
+  - pattern: 'is it done|did it ship|is that fixed|did the tests pass'
+    rule: 'Claim of completion. Show the evidence in the same answer: the command that was run and its real output. No evidence, no claim.'
+    memory: evidence-before-the-claim
+    active: true
+
+  - pattern: 'never mind|forget it|drop that'
+    rule: 'EXAMPLE of a parked entry: active false keeps the rule and its history out of the way without erasing why it was written.'
+    memory: parked-example-entry
+    active: false

@@ -91,9 +91,13 @@ def resulting_content(payload, path):
 
 
 def main():
+    if os.environ.get("HARNESS_MEMORY_VERDICT_GATE_DISABLE") == "1":
+        gate_stat("memory-verdict", "skip-disabled")
+        return 0
     try:
         payload = json.load(sys.stdin)
     except Exception:
+        gate_stat("memory-verdict", "fail-open", reason="unreadable payload")
         return 0
     inp = payload.get("tool_input", {}) or {}
     path = inp.get("file_path", "") or ""
@@ -197,5 +201,9 @@ if __name__ == "__main__":
     except SystemExit:
         raise
     except Exception as e:  # fail-open: a gate bug never breaks the flow
+        # Journal it too: a gate that dies silently is invisible to the
+        # sentinel's aliveness cross-check, which is exactly how a dead gate
+        # goes on lying about being armed.
+        gate_stat("memory-verdict", "fail-open", reason=type(e).__name__)
         print(f"memory-verdict-gate fail-open: {type(e).__name__}", file=sys.stderr)
         sys.exit(0)
