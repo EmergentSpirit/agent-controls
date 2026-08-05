@@ -150,7 +150,7 @@ def dangerous_command(cmd: str) -> bool:
 
 def main() -> int:
     if os.environ.get("HARNESS_GREP_QUANTIFIER_GATE_DISABLE") == "1":
-        gate_stat("grep-quantifier", "kill-switch")
+        gate_stat("grep-quantifier", "skip-disabled")
         return 0
     try:
         data = json.load(sys.stdin)

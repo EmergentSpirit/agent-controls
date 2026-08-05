@@ -98,7 +98,7 @@ def dangerous_command(cmd: str) -> bool:
 
 def main() -> int:
     if os.environ.get("HARNESS_HOME_PREFIX_GATE_DISABLE") == "1":
-        gate_stat("home-prefix", "kill-switch")
+        gate_stat("home-prefix", "skip-disabled")
         return 0
     try:
         data = json.load(sys.stdin)

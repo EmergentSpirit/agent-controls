@@ -26,6 +26,17 @@ after batch 1 require a justification in the batch handoff.
 | `HARNESS_WRITE_SCOPE` | Colon-separated write perimeter | session cwd |
 | `HARNESS_PROTECTED_SETTINGS` | Colon-separated protected config paths | `~/.claude/settings.json` |
 | `HARNESS_MAX_RESPONSE_WORDS` | Response length ceiling | `350` |
+| `HARNESS_HOOK_DIRS` | Colon-separated directories holding live hooks | gate dir + `~/.claude/hooks` |
+| `HARNESS_SETTINGS_STAMP` | Path of the "operator said go" stamp file | `$HARNESS_STATE_DIR/settings-go.stamp` |
+| `HARNESS_OPERATOR_SCRIPT_DIRS` | Colon-separated dirs of scripts a human runs by hand | `~/operator-scripts` |
+| `HARNESS_LLM_CLI_NAMES` | Colon-separated agent CLI binaries to watch | `claude` |
+| `HARNESS_DESTRUCTIVE_COMMAND_FAMILIES` | Armed destructive families, comma-separated | `1,2,6` |
+| `HARNESS_DESTRUCTIVE_COMMAND_SECRET_FILES` | Colon-separated secret-bearing filename markers | `.secrets:.age:authorized_keys:known_hosts` |
+| `HARNESS_DESTRUCTIVE_COMMAND_EXTRA_PATTERNS` | Extra deny regexes, one per line | empty |
+| `HARNESS_<GATE_NAME>_GATE_DISABLE` | Per-gate session kill-switch (`=1`) | unset |
+
+A kill-switch is deliberate and never silent: the gate lets the hit through
+and journals it as `skip-disabled`, so routing around a gate stays visible.
 
 Test suites override `HARNESS_GATE_STATS` to a tempdir. Never override it in
 production: the journal is what proves a gate is alive.

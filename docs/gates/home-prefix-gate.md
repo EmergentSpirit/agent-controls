@@ -2,7 +2,7 @@
 
 PreToolUse gate on `Bash`. Exit 2 = block, fail-open everywhere, every
 execution logs one line to the gate-stats journal (`pass`, `block`,
-`fail-open`, `kill-switch`).
+`fail-open`, `skip-disabled`).
 
 ## What it blocks
 
@@ -40,5 +40,5 @@ false result that wears the clothes of a measurement.
   trial and writes its verdict to a file on disk, launch it, then read the
   file. The result no longer crosses the broken capture path.
 - To read a process's environment: `tr '\0' '\n' < /proc/<pid>/environ`.
-- Session kill-switch (deliberate, logged as `kill-switch`):
+- Session kill-switch (deliberate, logged as `skip-disabled`):
   `HARNESS_HOME_PREFIX_GATE_DISABLE=1`.

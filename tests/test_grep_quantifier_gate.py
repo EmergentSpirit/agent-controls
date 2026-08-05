@@ -133,7 +133,7 @@ class TestGrepQuantifierGate(unittest.TestCase):
         env = dict(self.env, HARNESS_GREP_QUANTIFIER_GATE_DISABLE="1")
         r = run_hook(bash_payload("grep -E '%s' notes.txt" % KILLER), env)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.last_stat()["result"], "kill-switch")
+        self.assertEqual(self.last_stat()["result"], "skip-disabled")
 
     def test_non_bash_tool_ignored(self):
         """Other tools are out of scope: exit 0, no journal line. Writing the

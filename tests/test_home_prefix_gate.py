@@ -102,7 +102,7 @@ class TestHomePrefixGate(unittest.TestCase):
         env = dict(self.env, HARNESS_HOME_PREFIX_GATE_DISABLE="1")
         r = run_hook(bash_payload("HOME=/tmp/x python3 -V"), env)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.last_stat()["result"], "kill-switch")
+        self.assertEqual(self.last_stat()["result"], "skip-disabled")
 
     def test_non_bash_tool_ignored(self):
         """Other tools are out of scope: exit 0, no journal line."""

@@ -2,7 +2,7 @@
 
 PreToolUse gate on `Bash`. Exit 2 = block, fail-open everywhere, every
 execution logs one line to the gate-stats journal (`pass`, `block`,
-`fail-open`, `kill-switch`).
+`fail-open`, `skip-disabled`).
 
 ## What it blocks
 
@@ -72,5 +72,5 @@ that keep the same match.
   `bash foo.sh` — child processes get the healthy GNU grep.
 - **Rewrite the pattern**: one bounded quantifier only, or non-overlapping
   character classes instead of two overlapping `.{m,n}`.
-- Session kill-switch (deliberate, logged as `kill-switch`):
+- Session kill-switch (deliberate, logged as `skip-disabled`):
   `HARNESS_GREP_QUANTIFIER_GATE_DISABLE=1`.
