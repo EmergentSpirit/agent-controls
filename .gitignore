@@ -4,3 +4,7 @@ __pycache__/
 *.egg-info/
 .venv/
 .DS_Store
+
+# The watch panel's database is DERIVED and holds one operator's sessions.
+# What is published is watch/schema.sql plus the indexer that fills it.
+*.db

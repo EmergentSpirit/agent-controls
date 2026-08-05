@@ -1,0 +1,38 @@
+# EXAMPLE user unit -- NOT shipped armed. Copy it to
+# ~/.config/systemd/user/, adjust the paths, then:
+#
+#   chmod +x ~/harness/recall/recall-refresh.sh
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now harness-recall-refresh.timer
+#
+# ---------------------------------------------------------------------------
+# THE PATH TRAP -- read this before deleting the Environment=PATH line.
+#
+# A systemd unit does NOT inherit your login PATH; it starts with a minimal one
+# that does NOT contain the per-user bin directory. This unit is the textbook
+# case: recall-refresh.sh calls `updatedb` and `python3` BY NAME. With a bare
+# PATH those calls fail inside the script, the script's own guard reports the
+# index as skipped, the unit still exits 0, and the timer keeps firing every
+# twenty minutes while the index quietly goes stale. Three scheduled jobs died
+# exactly this way before the rule was written down: declare PATH in EVERY
+# unit, including the ones that look like they do not need it.
+# ---------------------------------------------------------------------------
+
+[Unit]
+Description=Harness recall -- rebuild the file-existence index, then the health pass
+
+[Service]
+Type=oneshot
+
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=HARNESS_HOME=%h/harness
+Environment=HARNESS_STATE_DIR=%h/.harness
+
+# Optional: index a subtree instead of the whole home directory.
+# Environment=HARNESS_RECALL_SCOPE=%h/work
+
+# Background maintenance must never compete with an interactive session.
+Nice=10
+IOSchedulingClass=idle
+
+ExecStart=%h/harness/recall/recall-refresh.sh

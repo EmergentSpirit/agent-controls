@@ -1,0 +1,19 @@
+# EXAMPLE user timer -- copy to ~/.config/systemd/user/ next to its .service.
+
+[Unit]
+Description=Harness governor -- weekly audit of the live gate battery
+
+[Timer]
+# Monday morning: the decision page is read at the start of a week, not filed
+# on a Friday evening and forgotten.
+OnCalendar=Mon *-*-* 08:30:00
+
+# A machine off on Monday must not skip the week: the audit runs at the next
+# boot instead. An audit timer that quietly stops firing is itself a dead gate,
+# which is why the audit also appends one aliveness line per run.
+Persistent=true
+
+Unit=harness-governor-audit.service
+
+[Install]
+WantedBy=timers.target

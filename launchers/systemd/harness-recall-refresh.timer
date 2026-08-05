@@ -1,0 +1,19 @@
+# EXAMPLE user timer -- copy to ~/.config/systemd/user/ next to its .service.
+
+[Unit]
+Description=Harness recall -- refresh the index shortly after boot, then periodically
+
+[Timer]
+# One minute after boot: an index that is one boot stale answers "no, never
+# built" about something built yesterday, which is the exact wrong answer.
+OnBootSec=1min
+
+# Then on a loop. Twenty minutes is a compromise: short enough that an artifact
+# born this morning is findable this afternoon, long enough to stay invisible.
+OnUnitActiveSec=20min
+
+Persistent=true
+Unit=harness-recall-refresh.service
+
+[Install]
+WantedBy=timers.target

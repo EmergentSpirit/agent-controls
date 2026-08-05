@@ -1,0 +1,49 @@
+# EXAMPLE user unit -- NOT shipped armed. Copy it to
+# ~/.config/systemd/user/, adjust the two paths below, then:
+#
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now harness-sentinel.timer
+#   systemctl --user start harness-sentinel.service   # first run, right now
+#
+# ---------------------------------------------------------------------------
+# THE PATH TRAP -- read this before deleting the Environment=PATH line.
+#
+# A systemd unit does NOT inherit your login PATH. It starts with a minimal one
+# that does NOT contain the per-user bin directory where an agent CLI, a
+# language runtime or a helper binary normally lives. A job that shells out to
+# such a binary then fails with "command not found" INSIDE a subprocess, the
+# unit still exits 0, and the timer keeps firing on schedule while doing
+# nothing. Three scheduled jobs died exactly that way, silently, and each one
+# was found by accident days later -- the same failure mode the sentinel
+# exists to catch, hitting the sentinel itself.
+#
+# So: every unit here declares its PATH explicitly, even when the current
+# ExecStart looks like it does not need one. The line costs nothing; its
+# absence costs a week of believing a dead job is alive.
+# ---------------------------------------------------------------------------
+
+[Unit]
+Description=Harness sentinel -- daily proof that the wired gates are alive
+
+[Service]
+Type=oneshot
+
+# %h expands to the invoking user's home directory: no absolute home path is
+# ever hard-coded in these examples.
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=HARNESS_HOME=%h/harness
+Environment=HARNESS_STATE_DIR=%h/.harness
+
+WorkingDirectory=%h/harness
+
+# --settings takes one or more files: point it at the settings your agents
+# ACTUALLY load. The launcher renders one per role into the state directory
+# ($HARNESS_STATE_DIR/settings.<role>.json), so add the roles you run.
+# --quiet writes the daily report without printing it into the journal.
+ExecStart=/usr/bin/python3 %h/harness/sentinel/sentinel.py \
+    --settings %h/.harness/settings.builder.json \
+    --quiet
+
+# No --strict here on purpose: the sentinel exits 0 whatever the verdict, so a
+# FAIL never disables its own timer. A monitor that kills itself on bad news is
+# a monitor that stops monitoring.

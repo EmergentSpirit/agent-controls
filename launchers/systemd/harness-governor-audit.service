@@ -1,0 +1,45 @@
+# EXAMPLE user unit -- NOT shipped armed. Copy it to
+# ~/.config/systemd/user/, adjust the paths, then:
+#
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now harness-governor-audit.timer
+#
+# ---------------------------------------------------------------------------
+# THE PATH TRAP -- read this before deleting the Environment=PATH line.
+#
+# A systemd unit does NOT inherit your login PATH; it starts with a minimal one
+# that does NOT contain the per-user bin directory where the agent CLI lives.
+# The governor calls that CLI by name for the judge pass, and under a bare PATH
+# the call fails inside a subprocess: the audit exits 0, the timer keeps
+# firing, and the governance layer is dead while looking perfectly healthy.
+# Three scheduled jobs died exactly this way. Every unit here declares its PATH
+# explicitly, even when the current ExecStart does not obviously need it.
+# ---------------------------------------------------------------------------
+
+[Unit]
+Description=Harness governor -- weekly gate audit by exception, then close due trials
+
+[Service]
+Type=oneshot
+
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=HARNESS_HOME=%h/harness
+Environment=HARNESS_STATE_DIR=%h/.harness
+
+# Which settings files define the LIVE battery being audited.
+Environment=HARNESS_GOVERNOR_SETTINGS=%h/.harness/settings.builder.json
+
+# A judge key is passed BY NAME, never by value: the variable named here is
+# read from the environment at call time, so no secret is ever written into a
+# unit file (unit files are world-readable by default).
+# Environment=HARNESS_JUDGE2_API_KEY_ENV=EXAMPLE_API_KEY
+
+WorkingDirectory=%h/harness
+
+# The audit is deterministic: it reads the gate-stats journal and writes a
+# decision page ONLY when a decision is pending.
+ExecStart=/usr/bin/python3 %h/harness/governor/audit.py
+
+# Then close the observation trials whose window has ended. ExecStartPost runs
+# after the audit and its own failure does not mask the audit's result.
+ExecStartPost=/usr/bin/python3 %h/harness/governor/trial.py

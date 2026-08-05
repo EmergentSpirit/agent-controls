@@ -1,0 +1,17 @@
+# EXAMPLE user timer -- copy to ~/.config/systemd/user/ next to its .service.
+
+[Unit]
+Description=Run the harness sentinel every morning
+
+[Timer]
+OnCalendar=*-*-* 06:30:00
+
+# Persistent=true matters more than the hour: a machine asleep at 06:30 runs
+# the check at the next boot instead of skipping the day in silence. A missed
+# health check that leaves no trace is the failure this module exists to kill.
+Persistent=true
+
+Unit=harness-sentinel.service
+
+[Install]
+WantedBy=timers.target

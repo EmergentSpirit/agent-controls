@@ -91,6 +91,42 @@ and journals it as `skip-disabled`, so routing around a gate stays visible.
 | `HARNESS_GOVERNOR_NOISY_MIN` | Blocks in the window that earn a review | `10` |
 | `HARNESS_GOVERNOR_LEDGER` | Ledger path override | `$HARNESS_STATE_DIR/governor/ledger.jsonl` |
 
+### watch
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `HARNESS_WATCH_DB` | Derived observation database | `$HARNESS_STATE_DIR/watch/watch.db` |
+| `HARNESS_WATCH_TRANSCRIPTS` | Transcript roots, `[<role>=]<dir>` colon-separated | `~/.claude/projects` subdirs |
+| `HARNESS_WATCH_JOURNALS` | Journals to index, `[<scope>=]<file>` | the gate-stats journal |
+| `HARNESS_WATCH_EXCLUDE` | fnmatch patterns whose TRANSCRIPTS are never indexed | empty |
+| `HARNESS_WATCH_PORT` | Local port (bind is always 127.0.0.1) | `8815` |
+| `HARNESS_WATCH_MODEL` | Model alias for the post-hoc analyst | `sonnet` |
+| `HARNESS_WATCH_TIMEOUT` | Analyst call timeout, seconds | `600` |
+
+The exclusion list is a deliberate blind spot: an observation panel that can
+see everything ends up watching people, not gates. Excluding a role's
+transcripts removes them retroactively, and its gate journals stay indexed.
+
+### launchers
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `HARNESS_HOME` | Absolute path of the harness checkout | required |
+| `HARNESS_WORKSPACE` | Working directory the agent starts in | `$PWD` |
+| `HARNESS_SETTINGS` | Settings file used as-is | rendered from the example |
+| `HARNESS_CLI` | Agent CLI binary to exec | first of `HARNESS_LLM_CLI_NAMES` |
+| `HARNESS_VAULT` | age-encrypted env file | `~/.harness-secrets.env.age` |
+| `HARNESS_VAULT_IDENTITY` | age identity file | `~/.config/age/identity.txt` |
+| `HARNESS_VAULT_IDENTITY_CMD` | Command printing an identity (hardware key) | unset |
+| `HARNESS_VAULT_KEYS` | Colon-separated allowlist of names to export | empty = all |
+| `HARNESS_ROLE_PROMPT` | Role system-prompt file (lives outside this repo) | unset |
+| `HARNESS_BOOT_PROMPT` | First prompt handed to the agent | unset |
+| `HARNESS_MCP_CONFIG` | Connector config | unset = no connectors |
+
+Vault values are decrypted once at startup and live in memory only. A missing
+vault warns and continues; a failed decryption leaves the keys EMPTY and says
+so, rather than starting a session that will fail obscurely later.
+
 The second judge is a deployment choice, never a hard dependency: no provider
 is named in the code. An absent judge produces an explicit `judge-unavailable`
 status and routes to `pending-judge/`. It never produces a yes by default,
