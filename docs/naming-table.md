@@ -46,6 +46,60 @@ after batch 1 require a justification in the batch handoff.
 A kill-switch is deliberate and never silent: the gate lets the hit through
 and journals it as `skip-disabled`, so routing around a gate stays visible.
 
+### recall
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `HARNESS_RECALL_CATALOG` | Curated catalog | shipped example |
+| `HARNESS_RECALL_STAGING` | Auto-captured drafts | `$HARNESS_STATE_DIR/recall/STAGING.md` |
+| `HARNESS_RECALL_INDEX_DB` | File-index database | `$HARNESS_STATE_DIR/recall/fs-index.db` |
+| `HARNESS_RECALL_INDEX_BIN` | Index query binary (optional accelerator) | `plocate` |
+| `HARNESS_RECALL_SCOPE` | Tree the refresh script indexes | `$HOME` |
+| `HARNESS_RECALL_REPORT` | Freshness report | `$HARNESS_STATE_DIR/recall/freshness-report.md` |
+| `HARNESS_RECALL_CURATE_LOG` | Curation log | `$HARNESS_STATE_DIR/recall/curate-log.md` |
+| `HARNESS_RECALL_TODAY` | Today's date, injected by the caller | unset = undecidable |
+| `HARNESS_RECALL_STALE_DAYS` | Staleness window, days | `45` |
+| `HARNESS_RECALL_MAX_HITS` | Ceiling on injected entries | `4` |
+| `HARNESS_RECALL_SHEET_MAX` | Ceiling on an injected sheet, characters | `1800` |
+| `HARNESS_RECALL_BOOT_MAX` | Ceiling on the boot surface, characters | `4800` |
+| `HARNESS_RECALL_CURATE_TIMEOUT` | Hard timeout of a curation pass, seconds | `300` |
+
+### sentinel
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `HARNESS_SENTINEL_SETTINGS` | Settings files whose wiring is audited | `~/.claude/*settings*.json` |
+| `HARNESS_SENTINEL_REPORT_DIR` | Where daily reports land | `$HARNESS_STATE_DIR/sentinel` |
+| `HARNESS_SENTINEL_COVERAGE_DAYS` | Journal window for the coverage check, days | `7` |
+| `HARNESS_SENTINEL_FRESHNESS_HOURS` | Journal freshness ceiling, hours | `24` |
+| `HARNESS_SENTINEL_EXEMPT` | Extra colon-separated exemption globs | empty |
+| `HARNESS_SENTINEL_ACTIVITY_PATHS` | Paths proving a session ran (silence becomes FAIL) | empty |
+| `HARNESS_SENTINEL_PROBES` | Optional probe file; unset = probe family off | unset |
+| `HARNESS_SENTINEL_PROBE_ALLOW` | Allowed probe commands (first word) | `test:curl:systemctl` |
+
+### governor
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `HARNESS_JUDGE1_MODEL` | Model alias for the local CLI judge | CLI default |
+| `HARNESS_JUDGE2_URL` | Second judge endpoint; unset = judge 2 unavailable | unset |
+| `HARNESS_JUDGE2_MODEL` | Model id sent to that endpoint | unset |
+| `HARNESS_JUDGE2_API_KEY_ENV` | NAME of the variable holding the key, never the key | unset |
+| `HARNESS_GOVERNOR_TIMEOUT` | Hard timeout of one judge call, seconds | `300` |
+| `HARNESS_GOVERNOR_SETTINGS` | Settings files whose hooks are audited | `~/.claude/settings.json` |
+| `HARNESS_GOVERNOR_WINDOW_DAYS` | Audit window, days | `30` |
+| `HARNESS_GOVERNOR_NOISY_MIN` | Blocks in the window that earn a review | `10` |
+| `HARNESS_GOVERNOR_LEDGER` | Ledger path override | `$HARNESS_STATE_DIR/governor/ledger.jsonl` |
+
+The second judge is a deployment choice, never a hard dependency: no provider
+is named in the code. An absent judge produces an explicit `judge-unavailable`
+status and routes to `pending-judge/`. It never produces a yes by default,
+which is the whole point of having two.
+
+Variables suffixed `_FAKE_JUDGE1`, `_FAKE_JUDGE2`, `_FAKE_VERDICT` exist for
+tests only: they short-circuit an LLM call with a fixed verdict so the suites
+never touch the network.
+
 Test suites override `HARNESS_GATE_STATS` to a tempdir. Never override it in
 production: the journal is what proves a gate is alive.
 

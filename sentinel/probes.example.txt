@@ -1,0 +1,31 @@
+# EXAMPLE probe file for the sentinel -- site-specific checks, OFF by default.
+#
+# Point the sentinel at your own copy:
+#   sentinel.py --probes ~/my-probes.txt
+#   HARNESS_SENTINEL_PROBES=~/my-probes.txt
+#
+# One shell command per line. Exit 0 is OK, anything else is FAIL, and a
+# command that runs longer than 10 s is FAIL too. Lines starting with # are
+# ignored.
+#
+# Only commands whose FIRST word is allowlisted actually run (default
+# allowlist: test, curl, systemctl -- override with
+# HARNESS_SENTINEL_PROBE_ALLOW). Anything else is reported as SKIP with the
+# reason, never silently dropped. The sentinel runs unattended from a timer:
+# a config file must not become an arbitrary execution surface.
+#
+# Nothing below ships armed. Every line is an EXAMPLE of the SHAPE of a probe.
+# A probe that does not come from a real incident is noise in tomorrow's
+# report, and noise is how a real FAIL gets scrolled past.
+
+# The state directory the whole harness writes into still exists.
+test -d "${HARNESS_STATE_DIR:-$HOME/.harness}"
+
+# A service the agent depends on is running.
+systemctl --user is-active --quiet example-service.service
+
+# An internal endpoint answers.
+curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8080/health
+
+# Not allowlisted by default: reported as SKIP, with the reason, every run.
+# python3 /path/to/your/own/deep-check.py
