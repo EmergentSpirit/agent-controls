@@ -11,3 +11,8 @@
 # Adding to this file means asserting, by hand, that a finding is fake.
 # Nothing here is a mute button for a real leak.
 98df07fd04cffc5f980370297ef111630bfab4e0:tests/test_watch.py:generic-api-key:35
+
+# Same shape, in the mission-control suite: a fake read token used to prove
+# the panel refuses a proxied request without one. The current line carries an
+# inline gitleaks:allow; this covers the commit made before the annotation.
+9ff545fdde9e2149712ff0393c32b204d62c4af8:tests/test_mission_control.py:generic-api-key:1138

@@ -1118,7 +1118,10 @@ class TestReadToken(ServedPanel):
         self.assertEqual(self.raw(port, "GET", "/api/logs")[0], 200)
 
     def test_t19_a_proxied_request_passes_on_the_token_by_header_cookie_or_query(self):
-        self.token_file.write_text("s3cret-fixture-token\n", encoding="utf-8")
+        # A DELIBERATE fake, named so it reads as one. A scanner flagging the
+        # lines below is reading them correctly; no real token is in this repo.
+        self.token_file.write_text("s3cret-fixture-token\n",  # gitleaks:allow
+                                   encoding="utf-8")
         self.assertEqual(self.server.read_token(), "s3cret-fixture-token")
         port = self.serve()
         proxied = {"X-Forwarded-For": "203.0.113.9"}
@@ -1135,7 +1138,8 @@ class TestReadToken(ServedPanel):
             self.assertEqual(json.loads(body)["count"], 23)
 
         for extra, path in (
-                ({"X-Panel-Token": "s3cret-fixture-toke"}, "/api/logs"),
+                ({"X-Panel-Token": "s3cret-fixture-toke"},  # gitleaks:allow
+                 "/api/logs"),
                 ({"X-Panel-Token": "s3cret-fixture-tokenn"}, "/api/logs"),
                 ({"X-Panel-Token": ""}, "/api/logs"),
                 ({"Cookie": "panel_token=nope"}, "/api/logs"),
