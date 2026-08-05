@@ -1,88 +1,171 @@
+<div align="center">
+
 # agent-controls
 
-**Discipline for coding agents, armed rather than promised.**
+### Discipline for coding agents, armed rather than promised.
 
-A file-based control harness: deterministic gates on what an agent does,
-a journal that proves they ran, and a governor that decides which rules
-earn their place.
+**Deterministic gates on what an agent does · a journal that proves they ran · a
+governor that decides which rules earn their place**
 
-Every team that works with a coding agent writes the same document. Always
-verify before claiming. Never delete without a backup. Do not rewrite the
-config on your own initiative. It goes in the system prompt, and for a while
-it works.
+[![CI](https://github.com/EmergentSpirit/agent-controls/actions/workflows/ci.yml/badge.svg)](https://github.com/EmergentSpirit/agent-controls/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-313%20passing-brightgreen.svg)](tests/)
+[![Dependencies](https://img.shields.io/badge/dependencies-none-informational.svg)](#why-there-is-no-install-step)
 
-Then the context gets long, the task gets interesting, and the rule quietly
-stops applying. Nothing errors. Nothing looks wrong. The agent reports
-success, and the success is not real.
+[Quickstart](docs/quickstart.md) · [Architecture](ARCHITECTURE.md) ·
+[The gates](docs/gates/) · [Contributing](CONTRIBUTING.md)
+
+</div>
+
+---
+
+## The problem
+
+Every team working with a coding agent writes the same document. Always verify
+before claiming. Never delete without a backup. Do not rewrite the config on
+your own initiative.
+
+It goes in the system prompt, and for a while it works. Then the context gets
+long, the task gets interesting, and the rule quietly stops applying. Nothing
+errors. Nothing looks wrong. **The agent reports success, and the success is not
+real.**
 
 A rule in a prompt is a request. This repository turns the rules that matter
-into mechanisms: deterministic hooks that run outside the model, on files, in
-plain Python, with no way for a persuasive turn of phrase to talk them out of
-it.
+into mechanisms: processes that run outside the model, on files, in plain
+Python, with an exit code no turn of phrase can argue with.
 
-```
-$ Bash(rm -rf /srv/app/releases)
+<p align="center">
+  <img src="docs/media/hero-block.png" alt="A destructive command blocked, the agent taking the reversible path, and both events landing in the journal" width="880">
+</p>
 
-BLOCKED (destructive-command-gate) - recursive delete outside /tmp (rm -r).
-   If this is intended, the human decides BY SAYING SO: add to the command
-   [DESTRUCTIVE-AUTHORIZED reason=<why>]
-   Session kill switch: HARNESS_DESTRUCTIVE_COMMAND_GATE_DISABLE=1
-```
+Notice the shape of the refusal. It says what was blocked, why, **the working
+alternative**, and the documented way out. A gate that only says no teaches an
+agent to route around gates, and it takes exactly one of those to poison the
+credibility of all the others.
 
-The agent reads that, and either takes the reversible path or states a reason
-that lands in a journal someone can count later. Every block message in this
-repository is pasted from the gate that produces it, never paraphrased.
+---
 
 ## What is in here
 
-Thirteen gates, extracted from a system that has been running daily and
-carrying real work. Each one exists because something went wrong once:
+Eight modules. Take one, take all of them; a single gate dropped into your own
+hooks directory is a legitimate way to use this.
+
+| Module | What it does |
+|:--|:--|
+| **`hooks/`** | **13 gates** on what the agent runs and writes, plus the shared helper. Each one exists because something went wrong once. |
+| **`shield/`** | Behavioral rules in **three layers**: injected at the moment of risk, standing format invariants, and a reviewer that judges the outgoing message before it is displayed. |
+| **`memory/`** | **Statutory memory**: a verdict on top, a closed status vocabulary, and an index that carries the state of what it points at. |
+| **`recall/`** | A catalog that answers **"we already built this"** before an agent rebuilds it, with an executable liveness check per entry. |
+| **`sentinel/`** | Daily health checks that **discover** what they audit by reading your wiring. Its central check finds gates that are wired but silent. |
+| **`governor/`** | New rules face **two adversarial judges**, then a seven-day observation trial, before anything gets armed. |
+| **`watch/`** | A read-only local panel over gates and sessions, with a post-hoc analyst that proposes and never acts. |
+| **`launchers/`** | Wiring templates: example settings per role, a vault pattern, and systemd units that carry the PATH trap's fix. |
+
+### The thirteen gates, and the day each one was earned
 
 - a shell command prefixed with `HOME=` returned a **silently false result**
   that got reported as fact
-- a regex with unbounded quantifiers **OOM-killed two panes** on two separate
+- a regex with unbounded quantifiers **OOM-killed two panes**, on two separate
   days
 - renaming a live hook instead of copying it **froze a production session**:
   config is read at boot, and a vanished hook blocks every prompt after
 - an LLM judge that could see the answer it was grading returned a **flawless
   verdict** on work that was wrong, and cost real money to produce
-- an index line said a name had been relaunched; the real decision, buried in
-  a note body, was that the name was taken. **The index won.** Work restarted
+- an index line said a name had been relaunched; the real decision, buried in a
+  note body, was that the name was taken. **The index won**, and work restarted
   down a dead path
 
-That last one is why memory here is statutory: a verdict at the top, a closed
-status vocabulary, and an index that carries the state of what it points at.
-An index is read first. It must never lie.
+Every gate ships with its founding incident, anonymized but real, in
+[`docs/gates/`](docs/gates/).
 
-Beyond the gates: a three-layer behavioral shield that injects a rule **at the
-moment of risk** instead of hoping a permanent prompt is remembered; a catalog
-that answers "we already built this" before an agent rebuilds it; a daily
-sentinel; a governor that puts new rules in front of two adversarial judges;
-and a read-only observation panel.
+---
 
 ## The load-bearing idea
 
-**A gate that stays silent cannot be told apart from a gate that is dead.**
+> **A gate that stays silent cannot be told apart from a gate that is dead.**
 
 So every hook writes one line to a journal on every execution, whatever the
 outcome, including the boring ones. A gate that blocks nothing today still
 proves it ran. The sentinel cross-checks that journal daily and flags anything
-wired but silent, because a dead gate does not scream: it goes quiet, and
-quiet reads exactly like a good day.
+wired but silent, because a dead gate does not scream: it goes quiet, and quiet
+reads exactly like a good day.
 
-Everything follows from that:
+Everything else follows from that:
 
-- **fail-open** everywhere. A crashing gate lets the work through and says so.
-  A harness that can halt the work becomes the thing you disable under
-  pressure, and a disabled harness protects nothing.
-- **a kill-switch is allowed, and never silent.** Route around a gate and the
-  journal records `skip-disabled`. Bypasses are legitimate; invisible bypasses
-  are not.
-- **nothing arms itself.** Cloning this repository changes nothing. Gates run
-  because a settings file names them, and that file is yours.
-- **stdlib only.** No install step, no dependency to audit, no supply chain.
-  Where an optional accelerator exists, there is a fallback and a test proving
-  the two agree.
+**Fail-open, everywhere.** A crashing gate lets the work through and says so. A
+harness that can halt the work becomes the thing you disable under pressure, and
+a disabled harness protects nothing.
+
+**A kill-switch is allowed, and never silent.** Route around a gate and the
+journal records `skip-disabled`. Bypasses are legitimate; invisible ones are not.
+
+**Nothing arms itself.** Cloning this repository changes nothing. Gates run
+because a settings file names them, and that file is yours.
+
+---
+
+## Watch: seeing what actually happened
+
+A read-only panel, bound to loopback, over the journal and the session
+transcripts. It observes; it never intervenes.
+
+<p align="center">
+  <img src="docs/media/watch-dashboard.png" alt="Dashboard: sessions observed, gate events, blocks, sessions with a block, two time series, and a table of every gate by result" width="880">
+</p>
+
+<p align="center"><em>Which gate bites, on what, and how often. Every result in
+the frozen vocabulary is counted, so a gate sitting at zero is visible.</em></p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/media/watch-sessions.png" alt="Session list by role, with message counts, tool calls, blocks, and a per-session Analyze button"></td>
+<td width="50%"><img src="docs/media/watch-trajectory.png" alt="One session's trajectory: the gates that fired as chips, the message timeline, and an expanded tool call"></td>
+</tr>
+<tr>
+<td><strong>Sessions.</strong> One row per session, per role, with the number of
+blocks it collected.</td>
+<td><strong>Trajectory.</strong> The gates that fired, then the turn-by-turn
+thread. Expand a message to see the exact tool call.</td>
+</tr>
+</table>
+
+The panel has a **deliberate blind spot**: excluded transcripts are never
+indexed, retroactively. An observation panel that can see everything ends up
+watching people rather than gates.
+
+---
+
+## Governor: which rules earn their place
+
+A human cannot audit a system that makes decisions at machine speed. So a
+proposed rule does not get added because it sounds sensible. It gets judged.
+
+<p align="center">
+  <img src="docs/media/governor-propose.png" alt="Two judges from different model families reviewing two proposals: one accepted to build, one rejected and archived" width="880">
+</p>
+
+Two judges from **different model families**, neither seeing the other's
+verdict. One rejection kills the proposal. A judge that cannot be reached
+produces an explicit `judge-unavailable` and routes to a holding queue: it never
+produces a yes by default, which is the entire point of having two.
+
+<p align="center">
+  <img src="docs/media/governor-trial.png" alt="Opening a seven-day observation trial, and closing it with a count of observations, legitimate blocks and false positives" width="880">
+</p>
+
+A surviving proposal is still **not armed**. It journals what it *would* have
+blocked, for seven days, and blocks nothing. Then you look at the real catches
+and decide. The governor never arms anything itself; it hands you the evidence.
+
+<p align="center">
+  <img src="docs/media/governor-audit.png" alt="Weekly audit listing only the gates that are noisy or silent, with three real samples each and a keep-or-review decision" width="880">
+</p>
+
+The weekly audit runs **by exception**: a gate doing its job is not listed. Only
+the noisy ones, with real samples, and the silent ones, which are the dangerous
+kind.
+
+---
 
 ## Start here
 
@@ -92,38 +175,41 @@ cd agent-controls
 python3 -m pytest tests/ -q         # 313 tests, no outbound network, no install
 ```
 
-Then [docs/quickstart.md](docs/quickstart.md): fifteen minutes from clone to a
-gate blocking something on purpose, with the real output at every step.
+Then [**docs/quickstart.md**](docs/quickstart.md): fifteen minutes from clone to
+a gate blocking something on purpose, with the real output at every step. Every
+command on that page was executed to produce it.
 
 | If you want to | Read |
-|---|---|
+|:--|:--|
 | Understand how it holds together | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| Know what each gate blocks and why | [docs/gates/](docs/gates/) |
+| Know what each gate blocks, and why | [docs/gates/](docs/gates/) |
 | Enforce behavior, not just commands | [docs/shield.md](docs/shield.md) |
-| Stop rebuilding what exists | [docs/recall.md](docs/recall.md) |
+| Stop rebuilding what already exists | [docs/recall.md](docs/recall.md) |
 | Prove the harness is alive | [docs/sentinel.md](docs/sentinel.md) |
 | Govern which rules earn their place | [docs/governor.md](docs/governor.md) |
 | Keep memory that does not lie | [docs/statutory-memory.md](docs/statutory-memory.md) |
 | Observe without interfering | [docs/watch.md](docs/watch.md) |
 | Wire it into your own launcher | [docs/launchers.md](docs/launchers.md) |
-| Add a gate | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Add a gate of your own | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
-Take a piece or take all of it. A single gate in your own hooks directory is a
-legitimate way to use this.
+### Why there is no install step
+
+Standard library only. No package to add, no dependency to audit, no supply
+chain to trust. Where an optional accelerator exists, there is a fallback and a
+test proving the two agree. The suites open no outbound connection: every LLM
+judge is replaced by a fixed verdict through an environment variable.
+
+---
 
 ## One rule if you add your own
 
-**A gate is born from an incident, never from a good idea.**
+> **A gate is born from an incident, never from a good idea.**
 
 If you cannot tell the story of the day it hurt, the rule is noise, and noise
-costs false positives until someone switches the whole thing off. Every gate
-here carries its founding incident in its documentation, anonymized but real.
+costs false positives until someone switches the whole thing off.
 
-That is also why the governor exists. A human cannot audit a system that makes
-decisions at machine speed, so a proposed rule faces two adversarial judges
-from different model families, then earns a seven-day trial where it journals
-and blocks nothing, and only then gets armed. Most proposals die at the judges.
-That is the mechanism working.
+That is what the governor is for, and most proposals die at the judges. That is
+the mechanism working.
 
 ## License
 
