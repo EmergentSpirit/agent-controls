@@ -47,7 +47,7 @@ cd /tmp/agent-controls-quickstart/agent-controls
 ............................................................................................................... [ 70%]
 .................................................. [ 86%]
 ...........................................             [100%]
-313 passed, 179 subtests passed in 29.67s
+359 passed, 179 subtests passed in 39.26s
 ```
 
 The suites themselves make zero network call and use no API key: every LLM judge

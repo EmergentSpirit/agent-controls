@@ -55,7 +55,7 @@ hooks directory is a legitimate way to use this.
 
 | Module | What it does |
 |:--|:--|
-| **`hooks/`** | **13 gates** on what the agent runs and writes, plus the shared helper. Each one exists because something went wrong once. |
+| **`hooks/`** | **12 gates** on what the agent runs and writes, plus the shared helper and two stamp CLIs. The thirteenth gate ships with `memory/`. Each one exists because something went wrong once. |
 | **`shield/`** | Behavioral rules in **three layers**: injected at the moment of risk, standing format invariants, and a reviewer that judges the outgoing message before it is displayed. |
 | **`memory/`** | **Statutory memory**: a verdict on top, a closed status vocabulary, and an index that carries the state of what it points at. |
 | **`recall/`** | A catalog that answers **"we already built this"** before an agent rebuilds it, with an executable liveness check per entry. |

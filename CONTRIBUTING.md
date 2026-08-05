@@ -33,7 +33,7 @@ needs anything more than that to be tested, the change is wrong, not the CI.
 Current state of the suites, for reference:
 
 ```
-313 passed, 179 subtests passed in 29.74s
+359 passed, 179 subtests passed in 39.26s
 ```
 
 ---
