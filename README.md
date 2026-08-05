@@ -4,8 +4,11 @@
 
 ### Discipline for coding agents, armed rather than promised.
 
-**Deterministic gates on what an agent does · a journal that proves they ran · a
-governor that decides which rules earn their place**
+**13 deterministic gates · a 3-layer behavioral shield · statutory memory ·
+a journal that proves every gate ran · a governor of two adversarial judges ·
+two local panels over your fleet**
+
+*Standard library only. No install step, no dependency to audit.*
 
 [![CI](https://github.com/EmergentSpirit/agent-controls/actions/workflows/ci.yml/badge.svg)](https://github.com/EmergentSpirit/agent-controls/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
